@@ -357,7 +357,7 @@ async def submit_survey(
                 setattr(profile, key, value)
 
         db.commit()
-        return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url="/profile", status_code=status.HTTP_303_SEE_OTHER)
 
     except ValidationError as e:
         return templates.TemplateResponse(
@@ -379,6 +379,28 @@ async def submit_survey(
             },
             status_code=500
         )
+
+@app.get("/profile")
+@login_required
+async def profile_page(request: Request, db: Session = Depends(get_db)):
+    """Display user profile page."""
+    email = request.state.user_email
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
+    if not profile:
+        return RedirectResponse(url="/survey", status_code=status.HTTP_303_SEE_OTHER)
+
+    return templates.TemplateResponse(
+        "profile.html",
+        {
+            "request": request,
+            "user": user,
+            "user_profile": profile
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn

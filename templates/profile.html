@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Your Profile{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Profile Header -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <div class="px-4 py-5 sm:p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">{{ user.full_name }}</h2>
+                    <p class="mt-1 text-sm text-gray-500">{{ user.email }}</p>
+                </div>
+                <div>
+                    <a href="/survey" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                        Update Preferences
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Basic Information -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Basic Information</h3>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Age</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ user_profile.age }} years</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Gender</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ user_profile.gender }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Height</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ user_profile.height }} cm</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Weight</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ user_profile.weight }} kg</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Activity Level</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ user_profile.activity_level }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Primary Goal</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ user_profile.fitness_goal }}</dd>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Health Information -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Health Information</h3>
+            <div class="space-y-4">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Medical Conditions</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                        {% if user_profile.medical_conditions %}
+                            {{ user_profile.medical_conditions|join(", ") }}
+                        {% else %}
+                            None reported
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Medications</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                        {% if user_profile.medications %}
+                            {{ user_profile.medications|join(", ") }}
+                        {% else %}
+                            None reported
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Allergies</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                        {% if user_profile.allergies %}
+                            {{ user_profile.allergies|join(", ") }}
+                        {% else %}
+                            None reported
+                        {% endif %}
+                    </dd>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dietary Preferences -->
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Dietary Preferences</h3>
+            <div class="space-y-4">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Diet Type</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ user_profile.diet_type }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Food Preferences</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                        {% if user_profile.food_preferences %}
+                            {{ user_profile.food_preferences|join(", ") }}
+                        {% else %}
+                            None specified
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Food Restrictions</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                        {% if user_profile.food_restrictions %}
+                            {{ user_profile.food_restrictions|join(", ") }}
+                        {% else %}
+                            None specified
+                        {% endif %}
+                    </dd>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -114,7 +114,6 @@
                         <div class="mb-6">
                             <label class="block text-gray-700 text-sm font-bold mb-2">Do you have any medical conditions?</label>
                             <select class="form-select" name="medical_conditions" multiple size="5">
-                                <option value="">Select conditions</option>
                                 {% for condition in medical_conditions %}
                                 <option value="{{ condition.value }}">
                                     {% if condition.value == "NONE" %}None
@@ -230,7 +229,6 @@
                             <div class="mb-6">
                                 <label class="block text-gray-700 text-sm font-bold mb-2">What is your primary goal?</label>
                                 <select class="form-select" name="fitness_goal" required>
-                                    <option value="">Select your primary goal</option>
                                     {% for goal in fitness_goals %}
                                     <option value="{{ goal.value }}">
                                         {% if goal.value == "WEIGHT_LOSS" %}Weight Loss

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Health & Nutrition Tracker{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <!-- Daily Progress Card -->
+    <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">Daily Progress</h3>
+            <div class="mt-5">
+                <div class="relative pt-1">
+                    <div class="flex mb-2 items-center justify-between">
+                        <div>
+                            <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-indigo-600 bg-indigo-200">
+                                Calories
+                            </span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs font-semibold inline-block text-indigo-600">
+                                1200/2000
+                            </span>
+                        </div>
+                    </div>
+                    <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-indigo-200">
+                        <div style="width:60%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-500"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Add Card -->
+    <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">Quick Add Meal</h3>
+            <div class="mt-5">
+                <form x-data="{ mealType: 'breakfast' }" class="space-y-4">
+                    <div>
+                        <select x-model="mealType" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="breakfast">Breakfast</option>
+                            <option value="lunch">Lunch</option>
+                            <option value="dinner">Dinner</option>
+                            <option value="snack">Snack</option>
+                        </select>
+                    </div>
+                    <div>
+                        <input type="text" placeholder="Food name" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Add Meal
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Streak Card -->
+    <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">Current Streak</h3>
+            <div class="mt-5 text-center">
+                <span class="text-4xl font-bold text-indigo-600">7</span>
+                <span class="ml-2 text-gray-500">days</span>
+                <p class="mt-2 text-sm text-gray-500">Keep logging your meals to maintain your streak!</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="mt-8 bg-white overflow-hidden shadow rounded-lg">
+    <div class="p-5">
+        <h3 class="text-lg leading-6 font-medium text-gray-900">Weekly Progress</h3>
+        <div class="mt-5">
+            <canvas id="weeklyProgress" class="w-full" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('weeklyProgress').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+            datasets: [{
+                label: 'Calories',
+                data: [1800, 2000, 1950, 1700, 1800, 2100, 1900],
+                borderColor: 'rgb(79, 70, 229)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+});
+</script>
+{% endblock %}

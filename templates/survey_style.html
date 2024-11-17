@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}User Survey - Health & Nutrition Tracker{% endblock %}
+
+{% block content %}
+<div class="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+        <div class="bg-white shadow sm:rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <!-- Progress Bar -->
+                <div class="mb-8">
+                    <div class="step-progress">
+                        <div class="step-progress-bar" style="width: 0%"></div>
+                        <div class="step-item">
+                            <div class="step-circle active">1</div>
+                            <div class="text-sm">Basic Info</div>
+                        </div>
+                        <div class="step-item">
+                            <div class="step-circle">2</div>
+                            <div class="text-sm">Medical</div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="text-lg leading-6 font-medium text-gray-900">
+                    Complete Your Profile
+                </h3>
+                <div class="mt-2 max-w-xl text-sm text-gray-500">
+                    <p>Please provide some information about yourself to help us personalize your experience.</p>
+                </div>
+
+                <form id="surveyForm" class="mt-5 space-y-6" action="/survey" method="POST">
+                    {% if error %}
+                        <div class="rounded-md bg-red-50 p-4">
+                            <div class="flex">
+                                <div class="ml-3">
+                                    <h3 class="text-sm font-medium text-red-800">{{ error }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                    
+                    <!-- Step 1: Basic Information -->
+                    <div id="step1" class="step-content">
+                        <h4 class="text-md font-medium text-gray-900 mb-4">Basic Information</h4>
+                        <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+                            <div>
+                                <label for="age" class="block text-sm font-medium text-gray-700">Age</label>
+                                <div class="mt-1">
+                                    <input type="number" name="age" id="age" required min="13" max="120"
+                                        class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                        value="{{ profile.age if profile else '' }}">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="gender" class="block text-sm font-medium text-gray-700">Gender</label>
+                                <select id="gender" name="gender" required
+                                    class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                                    <option value="">Select gender</option>
+                                    {% for gender in genders %}
+                                    <option value="{{ gender.value }}" {% if profile and profile.gender == gender %}selected{% endif %}>
+                                        {{ gender.value|title }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="height" class="block text-sm font-medium text-gray-700">Height (cm)</label>
+                                <div class="mt-1">
+                                    <input type="number" name="height" id="height" required step="0.1" min="100" max="250"
+                                        class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                        value="{{ profile.height if profile else '' }}">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="weight" class="block text-sm font-medium text-gray-700">Current Weight (kg)</label>
+                                <div class="mt-1">
+                                    <input type="number" name="weight" id="weight" required step="0.1" min="30" max="300"
+                                        class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                        value="{{ profile.weight if profile else '' }}">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="target_weight" class="block text-sm font-medium text-gray-700">Target Weight (kg)</label>
+                                <div class="mt-1">
+                                    <input type="number" name="target_weight" id="target_weight" required step="0.1" min="30" max="300"
+                                        class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                        value="{{ profile.target_weight if profile else '' }}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-6 flex justify-end">
+                            <button type="button" onclick="nextStep(1)" class="ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                Next
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Medical Information -->
+                    <div id="step2" class="step-content hidden">
+                        <h4 class="text-md font-medium text-gray-900 mb-4">Medical Information</h4>
+                        <div class="space-y-6">
+                            <div>
+                                <label for="blood_type" class="block text-sm font-medium text-gray-700">Blood Type</label>
+                                <select id="blood_type" name="blood_type" required
+                                    class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                                    <option value="">Select blood type</option>
+                                    {% for blood_type in blood_types %}
+                                    <option value="{{ blood_type.value }}" {% if profile and profile.blood_type == blood_type %}selected{% endif %}>
+                                        {{ blood_type.value }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="medical_conditions" class="block text-sm font-medium text-gray-700">
+                                    Medical Conditions
+                                    <span class="text-xs text-gray-500">(Optional)</span>
+                                </label>
+                                <div class="mt-1">
+                                    <textarea id="medical_conditions" name="medical_conditions" rows="3"
+                                        class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                        placeholder="List any medical conditions that may affect your health and fitness journey (e.g., diabetes, hypertension, asthma)">{{ profile.medical_conditions if profile else '' }}</textarea>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="medications" class="block text-sm font-medium text-gray-700">
+                                    Current Medications
+                                    <span class="text-xs text-gray-500">(Optional)</span>
+                                </label>
+                                <div class="mt-1">
+                                    <textarea id="medications" name="medications" rows="3"
+                                        class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                        placeholder="List any medications you are currently taking">{{ profile.medications if profile else '' }}</textarea>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="allergies" class="block text-sm font-medium text-gray-700">
+                                    Allergies
+                                    <span class="text-xs text-gray-500">(Optional)</span>
+                                </label>
+                                <div class="mt-1">
+                                    <textarea id="allergies" name="allergies" rows="3"
+                                        class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                        placeholder="List any food or medication allergies">{{ profile.allergies if profile else '' }}</textarea>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="past_injuries" class="block text-sm font-medium text-gray-700">
+                                    Past Injuries
+                                    <span class="text-xs text-gray-500">(Optional)</span>
+                                </label>
+                                <div class="mt-1">
+                                    <textarea id="past_injuries" name="past_injuries" rows="3"
+                                        class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                        placeholder="List any past injuries that may affect your exercise routine">{{ profile.past_injuries if profile else '' }}</textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 flex justify-between">
+                            <button type="button" onclick="previousStep(2)"
+                                class="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                Previous
+                            </button>
+                            <button type="submit"
+                                class="ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                Submit
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentStep = 1;
+    const totalSteps = 2;
+
+    function updateProgressBar() {
+        const progress = ((currentStep - 1) / (totalSteps - 1)) * 100;
+        document.querySelector('.step-progress-bar').style.width = `${progress}%`;
+        
+        // Update step circles
+        document.querySelectorAll('.step-circle').forEach((circle, index) => {
+            if (index + 1 < currentStep) {
+                circle.classList.add('complete');
+                circle.classList.remove('active');
+            } else if (index + 1 === currentStep) {
+                circle.classList.add('active');
+                circle.classList.remove('complete');
+            } else {
+                circle.classList.remove('active', 'complete');
+            }
+        });
+    }
+
+    function showStep(step) {
+        document.querySelectorAll('.step-content').forEach(content => {
+            content.classList.add('hidden');
+        });
+        document.getElementById(`step${step}`).classList.remove('hidden');
+        currentStep = step;
+        updateProgressBar();
+    }
+
+    function nextStep(currentStep) {
+        if (validateStep(currentStep)) {
+            showStep(currentStep + 1);
+        }
+    }
+
+    function previousStep(currentStep) {
+        showStep(currentStep - 1);
+    }
+
+    function validateStep(step) {
+        const currentStepElement = document.getElementById(`step${step}`);
+        const requiredFields = currentStepElement.querySelectorAll('[required]');
+        
+        let isValid = true;
+        requiredFields.forEach(field => {
+            if (!field.value) {
+                field.classList.add('border-red-500');
+                isValid = false;
+            } else {
+                field.classList.remove('border-red-500');
+            }
+        });
+        
+        return isValid;
+    }
+
+    // Initialize the form
+    document.addEventListener('DOMContentLoaded', () => {
+        showStep(1);
+        updateProgressBar();
+    });
+</script>
+
+<style>
+    .step-progress {
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+    }
+
+    .step-progress-bar {
+        position: absolute;
+        height: 2px;
+        background-color: #4F46E5;
+        top: 50%;
+        transform: translateY(-50%);
+        transition: width 0.3s ease-in-out;
+    }
+
+    .step-item {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .step-circle {
+        width: 2rem;
+        height: 2rem;
+        background-color: white;
+        border: 2px solid #E5E7EB;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #6B7280;
+        margin-bottom: 0.5rem;
+        transition: all 0.3s ease-in-out;
+    }
+
+    .step-circle.active {
+        border-color: #4F46E5;
+        color: #4F46E5;
+    }
+
+    .step-circle.complete {
+        background-color: #4F46E5;
+        border-color: #4F46E5;
+        color: white;
+    }
+
+    .hidden {
+        display: none;
+    }
+</style>
+{% endblock %}

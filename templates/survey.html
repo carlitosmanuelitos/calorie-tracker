@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block title %}User Survey - Health & Nutrition Tracker{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', path='css/survey.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+        <div class="bg-white shadow sm:rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">
+                    Complete Your Profile
+                </h3>
+                
+                <!-- Progress bar -->
+                <div class="step-progress">
+                    <div class="step-progress-bar"></div>
+                    <div class="step-item">
+                        <div class="step-circle active">1</div>
+                        <span class="text-sm">Basic Info</span>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-circle">2</div>
+                        <span class="text-sm">Medical</span>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-circle">3</div>
+                        <span class="text-sm">Activity</span>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-circle">4</div>
+                        <span class="text-sm">Nutrition</span>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-circle">5</div>
+                        <span class="text-sm">Lifestyle</span>
+                    </div>
+                </div>
+
+                <div class="mt-2 max-w-xl text-sm text-gray-500">
+                    <p>Please provide some information about yourself to help us personalize your experience.</p>
+                </div>
+                
+                <form id="surveyForm" class="mt-5 space-y-6" action="/survey" method="POST">
+                    {% if error %}
+                        <div class="rounded-md bg-red-50 p-4">
+                            <div class="flex">
+                                <div class="ml-3">
+                                    <h3 class="text-sm font-medium text-red-800">{{ error }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                    
+                    <!-- Step 1: Basic Information -->
+                    <div id="step1" class="step-content">
+                        <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+                            <div class="form-group">
+                                <label for="age" class="form-label">Age</label>
+                                <input type="number" name="age" id="age" required 
+                                    class="form-input"
+                                    value="{{ profile.age if profile else '' }}">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="gender" class="form-label">Gender</label>
+                                <select id="gender" name="gender" required class="form-select">
+                                    <option value="">Select gender</option>
+                                    {% for gender in genders %}
+                                    <option value="{{ gender.value }}" {% if profile and profile.gender == gender.value %}selected{% endif %}>
+                                        {{ gender.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="height" class="form-label">Height (cm)</label>
+                                <input type="number" name="height" id="height" required
+                                    class="form-input"
+                                    value="{{ profile.height if profile else '' }}">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="weight" class="form-label">Current Weight (kg)</label>
+                                <input type="number" name="weight" id="weight" required
+                                    class="form-input"
+                                    value="{{ profile.weight if profile else '' }}">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="target_weight" class="form-label">Target Weight (kg)</label>
+                                <input type="number" name="target_weight" id="target_weight" required
+                                    class="form-input"
+                                    value="{{ profile.target_weight if profile else '' }}">
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6 flex justify-end">
+                            <button type="button" class="btn btn-primary" onclick="nextStep(currentStep)">
+                                Next
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Medical Information -->
+                    <div id="step2" class="step-content hidden">
+                        <h3 class="text-xl font-bold mb-4">Medical Information</h3>
+                        
+                        <!-- Medical Conditions -->
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">Do you have any medical conditions?</label>
+                            <select class="form-select" name="medical_conditions" multiple size="5">
+                                <option value="">Select conditions</option>
+                                {% for condition in medical_conditions %}
+                                <option value="{{ condition.value }}">
+                                    {% if condition.value == "NONE" %}None
+                                    {% elif condition.value == "DIABETES_TYPE_1" %}Type 1 Diabetes
+                                    {% elif condition.value == "DIABETES_TYPE_2" %}Type 2 Diabetes
+                                    {% elif condition.value == "HYPERTENSION" %}Hypertension (High Blood Pressure)
+                                    {% elif condition.value == "HEART_DISEASE" %}Heart Disease
+                                    {% elif condition.value == "ASTHMA" %}Asthma
+                                    {% elif condition.value == "ARTHRITIS" %}Arthritis
+                                    {% elif condition.value == "OSTEOPOROSIS" %}Osteoporosis
+                                    {% elif condition.value == "CHRONIC_PAIN" %}Chronic Pain
+                                    {% elif condition.value == "ANXIETY" %}Anxiety
+                                    {% elif condition.value == "DEPRESSION" %}Depression
+                                    {% elif condition.value == "THYROID_DISORDER" %}Thyroid Disorder
+                                    {% elif condition.value == "OTHER" %}Other
+                                    {% else %}{{ condition.value }}
+                                    {% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-gray-500">Hold Ctrl/Cmd to select multiple options</small>
+                        </div>
+
+                        <!-- Medications -->
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">Are you currently taking any medications?</label>
+                            <select class="form-select" name="medications" multiple size="5">
+                                <option value="">Select medications</option>
+                                {% for medication in common_medications %}
+                                <option value="{{ medication.value }}">
+                                    {% if medication.value == "NONE" %}None
+                                    {% elif medication.value == "BLOOD_PRESSURE" %}Blood Pressure Medication
+                                    {% elif medication.value == "DIABETES" %}Diabetes Medication
+                                    {% elif medication.value == "THYROID" %}Thyroid Medication
+                                    {% elif medication.value == "ANTIDEPRESSANTS" %}Antidepressants
+                                    {% elif medication.value == "ANTI_ANXIETY" %}Anti-Anxiety Medication
+                                    {% elif medication.value == "PAIN_RELIEVERS" %}Pain Relievers
+                                    {% elif medication.value == "ANTI_INFLAMMATORY" %}Anti-Inflammatory Medication
+                                    {% elif medication.value == "ALLERGY" %}Allergy Medication
+                                    {% elif medication.value == "ASTHMA_INHALER" %}Asthma Inhaler
+                                    {% elif medication.value == "OTHER" %}Other
+                                    {% else %}{{ medication.value }}
+                                    {% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-gray-500">Hold Ctrl/Cmd to select multiple options</small>
+                        </div>
+
+                        <!-- Allergies -->
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">Do you have any allergies?</label>
+                            <select class="form-select" name="allergies" multiple size="5">
+                                <option value="">Select allergies</option>
+                                {% for allergy in common_allergies %}
+                                <option value="{{ allergy.value }}">
+                                    {% if allergy.value == "NONE" %}None
+                                    {% elif allergy.value == "PEANUTS" %}Peanuts
+                                    {% elif allergy.value == "TREE_NUTS" %}Tree Nuts
+                                    {% elif allergy.value == "DAIRY" %}Dairy
+                                    {% elif allergy.value == "EGGS" %}Eggs
+                                    {% elif allergy.value == "SOY" %}Soy
+                                    {% elif allergy.value == "WHEAT" %}Wheat
+                                    {% elif allergy.value == "FISH" %}Fish
+                                    {% elif allergy.value == "SHELLFISH" %}Shellfish
+                                    {% elif allergy.value == "LATEX" %}Latex
+                                    {% elif allergy.value == "OTHER" %}Other
+                                    {% else %}{{ allergy.value }}
+                                    {% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-gray-500">Hold Ctrl/Cmd to select multiple options</small>
+                        </div>
+
+                        <!-- Past Injuries -->
+                        <div class="mb-6">
+                            <label class="block text-gray-700 text-sm font-bold mb-2">Have you had any past injuries?</label>
+                            <select class="form-select" name="past_injuries" multiple size="5">
+                                <option value="">Select injuries</option>
+                                {% for injury in past_injuries %}
+                                <option value="{{ injury.value }}">
+                                    {% if injury.value == "NONE" %}None
+                                    {% elif injury.value == "BACK_INJURY" %}Back Injury
+                                    {% elif injury.value == "KNEE_INJURY" %}Knee Injury
+                                    {% elif injury.value == "SHOULDER_INJURY" %}Shoulder Injury
+                                    {% elif injury.value == "ANKLE_SPRAIN" %}Ankle Sprain
+                                    {% elif injury.value == "WRIST_INJURY" %}Wrist Injury
+                                    {% elif injury.value == "HIP_INJURY" %}Hip Injury
+                                    {% elif injury.value == "NECK_INJURY" %}Neck Injury
+                                    {% elif injury.value == "FRACTURE" %}Fracture
+                                    {% elif injury.value == "MUSCLE_STRAIN" %}Muscle Strain
+                                    {% elif injury.value == "TENDONITIS" %}Tendonitis
+                                    {% elif injury.value == "OTHER" %}Other
+                                    {% else %}{{ injury.value }}
+                                    {% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-gray-500">Hold Ctrl/Cmd to select multiple options</small>
+                        </div>
+
+                        <div class="flex justify-between mt-8">
+                            <button type="button" class="btn btn-secondary" onclick="previousStep(currentStep)">Previous</button>
+                            <button type="button" class="btn btn-primary" onclick="nextStep(currentStep)">Next</button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Activity Information -->
+                    <div id="step3" class="step-content hidden">
+                        <div class="space-y-6">
+                            <!-- Primary Goal -->
+                            <div class="mb-6">
+                                <label class="block text-gray-700 text-sm font-bold mb-2">What is your primary goal?</label>
+                                <select class="form-select" name="fitness_goal" required>
+                                    <option value="">Select your primary goal</option>
+                                    {% for goal in fitness_goals %}
+                                    <option value="{{ goal.value }}">
+                                        {% if goal.value == "WEIGHT_LOSS" %}Weight Loss
+                                        {% elif goal.value == "WEIGHT_MAINTENANCE" %}Weight Maintenance
+                                        {% elif goal.value == "MUSCLE_GAIN" %}Muscle Gain/Bulking
+                                        {% elif goal.value == "GENERAL_HEALTH" %}General Health & Wellness
+                                        {% elif goal.value == "ATHLETIC_PERFORMANCE" %}Athletic Performance
+                                        {% elif goal.value == "REHABILITATION" %}Rehabilitation
+                                        {% elif goal.value == "STRESS_MANAGEMENT" %}Stress Management
+                                        {% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <!-- Exercise Time Preference -->
+                            <div class="mb-6">
+                                <label class="block text-gray-700 text-sm font-bold mb-2">When do you prefer to exercise?</label>
+                                <select class="form-select" name="time_preference" required>
+                                    <option value="">Select your preferred time</option>
+                                    {% for time in time_preferences %}
+                                    <option value="{{ time.value }}">
+                                        {% if time.value == "EARLY_MORNING" %}Early Morning (5AM-8AM)
+                                        {% elif time.value == "MORNING" %}Morning (8AM-11AM)
+                                        {% elif time.value == "MIDDAY" %}Midday (11AM-2PM)
+                                        {% elif time.value == "AFTERNOON" %}Afternoon (2PM-5PM)
+                                        {% elif time.value == "EVENING" %}Evening (5PM-8PM)
+                                        {% elif time.value == "LATE_EVENING" %}Late Evening (8PM-11PM)
+                                        {% elif time.value == "FLEXIBLE" %}Flexible Schedule
+                                        {% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Exercise Types -->
+                            <div class="mb-6">
+                                <label class="block text-gray-700 text-sm font-bold mb-2">What types of exercise do you prefer?</label>
+                                <select class="form-select" name="exercise_types" multiple size="5">
+                                    {% for type in exercise_types %}
+                                    <option value="{{ type.value }}">{{ type.value }}</option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-gray-500">Hold Ctrl/Cmd to select multiple options</small>
+                            </div>
+
+                            <!-- Preferred Sports -->
+                            <div class="mb-6">
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Which sports do you enjoy?</label>
+                                <select class="form-select" name="preferred_sports" multiple size="5">
+                                    {% for sport in preferred_sports %}
+                                    <option value="{{ sport.value }}">{{ sport.value }}</option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-gray-500">Hold Ctrl/Cmd to select multiple options</small>
+                            </div>
+
+                            <!-- Additional Notes -->
+                            <div class="mb-6">
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Additional Notes (Optional)</label>
+                                <textarea class="form-textarea" name="exercise_notes" rows="3" placeholder="Any additional information about your exercise preferences or sports experience"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 flex justify-between">
+                            <button type="button" class="btn btn-secondary" onclick="previousStep(currentStep)">Previous</button>
+                            <button type="button" class="btn btn-primary" onclick="nextStep(currentStep)">Next</button>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Nutrition Goals -->
+                    <div id="step4" class="step-content hidden">
+                        <div class="grid grid-cols-1 gap-y-6">
+                            <div class="form-group">
+                                <label for="daily_calorie_goal" class="form-label">Daily Calorie Target</label>
+                                <input type="number" id="daily_calorie_goal" name="daily_calorie_goal" required class="form-input"
+                                    placeholder="e.g., 2000" min="1200" max="8000">
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Macro Goals</label>
+                                <div class="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label for="protein_goal" class="text-sm text-gray-600">Protein (g)</label>
+                                        <input type="number" id="protein_goal" name="protein_goal" required
+                                            class="form-input" placeholder="150" min="20" max="400">
+                                    </div>
+                                    <div>
+                                        <label for="carbs_goal" class="text-sm text-gray-600">Carbs (g)</label>
+                                        <input type="number" id="carbs_goal" name="carbs_goal" required
+                                            class="form-input" placeholder="250" min="50" max="600">
+                                    </div>
+                                    <div>
+                                        <label for="fat_goal" class="text-sm text-gray-600">Fat (g)</label>
+                                        <input type="number" id="fat_goal" name="fat_goal" required
+                                            class="form-input" placeholder="70" min="20" max="200">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="water_goal" class="form-label">Daily Water Target</label>
+                                <input type="number" id="water_goal" name="water_goal" required
+                                    class="form-input" placeholder="e.g., 2.5" min="1" max="10" step="0.1">
+                                <span class="text-sm text-gray-500">Liters per day</span>
+                            </div>
+                        </div>
+                        <div class="mt-6 flex justify-between">
+                            <button type="button" class="btn btn-secondary" onclick="previousStep(currentStep)">Previous</button>
+                            <button type="button" class="btn btn-primary" onclick="nextStep(currentStep)">Next</button>
+                        </div>
+                    </div>
+
+                    <!-- Step 5: Lifestyle -->
+                    <div id="step5" class="step-content hidden">
+                        <div class="grid grid-cols-1 gap-y-6">
+                            <div class="form-group">
+                                <label for="sleep_hours" class="form-label">Average Sleep Hours</label>
+                                <input type="number" id="sleep_hours" name="sleep_hours" required
+                                    class="form-input" placeholder="e.g., 8" step="0.5"
+                                    value="{{ profile.sleep_hours if profile else '' }}">
+                                <span class="text-sm text-gray-500">Hours per night</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="stress_level" class="form-label">Typical Stress Level (1-5)</label>
+                                <select id="stress_level" name="stress_level" required class="form-select">
+                                    <option value="">Select stress level</option>
+                                    <option value="1">1 - Very Low</option>
+                                    <option value="2">2 - Low</option>
+                                    <option value="3">3 - Moderate</option>
+                                    <option value="4">4 - High</option>
+                                    <option value="5">5 - Very High</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="meal_frequency" class="form-label">Meals per Day</label>
+                                <select id="meal_frequency" name="meal_frequency" required class="form-select">
+                                    <option value="">Select meal frequency</option>
+                                    <option value="2">2 meals</option>
+                                    <option value="3">3 meals</option>
+                                    <option value="4">4 meals</option>
+                                    <option value="5">5 meals</option>
+                                    <option value="6">6+ meals</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 flex justify-between">
+                            <button type="button" class="btn btn-secondary" onclick="previousStep(currentStep)">Previous</button>
+                            <button type="submit" class="btn btn-primary">Complete Profile</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='js/survey.js') }}"></script>
+{% endblock %}

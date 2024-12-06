@@ -56,9 +56,9 @@ class SurveyCreate(BaseModel):
     
     # Nutrition Goals
     daily_calorie_goal: int = Field(..., ge=1200, le=8000)
-    protein_goal: int = Field(..., ge=20, le=400)
-    carbs_goal: int = Field(..., ge=50, le=600)
-    fat_goal: int = Field(..., ge=20, le=200)
+    protein_goal: int = Field(..., ge=0, le=400)
+    carbs_goal: int = Field(..., ge=0, le=600)
+    fat_goal: int = Field(..., ge=0, le=200)
     water_goal: float = Field(..., ge=1, le=10)
     
     # Lifestyle Information
@@ -68,6 +68,13 @@ class SurveyCreate(BaseModel):
 
     @classmethod
     async def as_form(cls, request: Request):
+        """
+        Parse a SurveyCreate object from a FastAPI request form.
+
+        This method is used to parse a FastAPI request form into a SurveyCreate
+        object. It handles enum fields, list enum fields, and medical multi-select
+        fields.
+        """
         form_data = await request.form()
         data = {}
         

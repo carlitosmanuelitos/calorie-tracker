@@ -115,3 +115,11 @@ FIRST_SUPERUSER_PASSWORD=your-secure-password
 ## License
 
 [Add your license here]
+
+
+## Acknowledgements
+
+- [FastAPI](https://fastapi.tiangolo.com/)
+- [SQLAlchemy](https://www.sqlalchemy.org/)
+- [Jinja2](https://jinja.palletsprojects.com/)
+

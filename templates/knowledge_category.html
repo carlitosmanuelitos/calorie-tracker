@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.title }} - Knowledge Base{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Back button -->
+    <a href="{{ url_for('knowledge_base') }}" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 mb-6">
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+        </svg>
+        Back to Knowledge Base
+    </a>
+
+    <!-- Article Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-4">{{ category.title }}</h1>
+        <p class="text-lg text-gray-600">{{ category.description }}</p>
+    </div>
+
+    <!-- Main Content -->
+    <div class="prose max-w-none mb-12">
+        {{ category.content | safe }}
+    </div>
+
+    <!-- Comments Section -->
+    <div class="border-t pt-8">
+        <h2 class="text-2xl font-bold text-gray-900 mb-6">Community Tips & Comments</h2>
+
+        <!-- Comment Form -->
+        <form method="POST" action="{{ url_for('add_comment', category_id=category.id) }}" class="mt-4">
+            <div>
+                <textarea
+                    name="comment_text"
+                    rows="3"
+                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="Add a comment..."
+                    required
+                ></textarea>
+            </div>
+            <div class="mt-3">
+                <button type="submit" class="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                    Post Comment
+                </button>
+            </div>
+        </form>
+
+        <!-- Comments List -->
+        <div class="space-y-6">
+            {% for comment in category.comments|sort(attribute='created_at', reverse=true) %}
+            <div class="bg-gray-50 rounded-lg p-4">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <p class="font-medium text-gray-900">{{ comment.user.username }}</p>
+                        <p class="text-sm text-gray-500">{{ comment.created_at.strftime('%B %d, %Y') }}</p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <form method="POST" action="{{ url_for('like_comment', comment_id=comment.id) }}" class="inline">
+                            <button type="submit" class="inline-flex items-center text-gray-600 hover:text-indigo-600">
+                                <svg class="h-5 w-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z" />
+                                </svg>
+                                <span>{{ comment.likes or 0 }}</span>
+                            </button>
+                        </form>
+                        {% if current_user and current_user.id == comment.user_id %}
+                        <form method="POST" action="{{ url_for('delete_comment', comment_id=comment.id) }}" class="inline">
+                            <button type="submit" class="text-red-600 hover:text-red-800 text-sm">Delete</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <p class="text-gray-800">{{ comment.content }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

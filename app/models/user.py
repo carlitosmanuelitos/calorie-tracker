@@ -32,6 +32,7 @@ class User(Base):
 
     # Relationship
     profile = relationship("UserProfile", back_populates="user", uselist=False)
+    comments = relationship("Comment", back_populates="user")
 
 class UserProfile(Base):
     """User profile model for storing user preferences and health data"""

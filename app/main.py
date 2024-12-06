@@ -18,12 +18,33 @@ from app.core.enums import (
 )
 from app.db.session import get_db
 from app.db.base import User, UserProfile
+from app.models.knowledge import KnowledgeCategory, Comment
 from app.schemas.survey import (
     SurveyCreate, HealthConditionSchema, MedicationSchema,
     AllergySchema, InjurySchema
 )
+from app.schemas.knowledge import KnowledgeCategoryCreate, CommentCreate
 from pydantic import ValidationError
 
+"""
+FastAPI application for the Calorie Tracker web application.
+
+This application provides API endpoints for user authentication, survey completion, and health data tracking.
+
+The application is configured via environment variables. The following variables are required:
+
+* `SECRET_KEY`: Secret key for secure password hashing and JWT token signing.
+* `DATABASE_URL`: URL for the database connection.
+* `FIRST_SUPERUSER_EMAIL`: Email address of the first superuser.
+* `FIRST_SUPERUSER_PASSWORD`: Password of the first superuser.
+
+The application is divided into the following modules:
+
+* `app.core`: Core functionality, including security, password validation, and user authentication.
+* `app.db`: Database models and database session management.
+* `app.schemas`: Pydantic models for API endpoints.
+* `app.routes`: API endpoints and route handlers.
+"""
 app = FastAPI(
     title=settings.PROJECT_NAME
 )
@@ -48,8 +69,14 @@ def login_required(func):
         if not email:
             return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
         
+        # Get user from database
+        db = next(get_db())
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+        
         # Add user to request state
-        request.state.user_email = email
+        request.state.user = user
         return await func(request, *args, **kwargs)
     return wrapper
 
@@ -171,7 +198,7 @@ async def dashboard(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == request.state.user_email).first()
+    user = db.query(User).filter(User.email == request.state.user.email).first()
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "user": user
@@ -289,7 +316,7 @@ async def reset_password(
 @login_required
 async def survey_page(request: Request, db: Session = Depends(get_db)):
     # Get user profile
-    user_email = request.state.user_email
+    user_email = request.state.user.email
     user = db.query(User).filter(User.email == user_email).first()
     profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
     
@@ -321,7 +348,7 @@ async def submit_survey(
     """Handle survey form submission."""
     try:
         # Get current user
-        email = request.state.user_email
+        email = request.state.user.email
         user = db.query(User).filter(User.email == email).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -384,7 +411,7 @@ async def submit_survey(
 @login_required
 async def profile_page(request: Request, db: Session = Depends(get_db)):
     """Display user profile page."""
-    email = request.state.user_email
+    email = request.state.user.email
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -400,6 +427,113 @@ async def profile_page(request: Request, db: Session = Depends(get_db)):
             "user": user,
             "user_profile": profile
         }
+    )
+
+@app.get("/knowledge-base")
+@login_required
+async def knowledge_base(request: Request, db: Session = Depends(get_db)):
+    """Display knowledge base categories."""
+    categories = db.query(KnowledgeCategory).all()
+    return templates.TemplateResponse(
+        "knowledge_base.html",
+        {"request": request, "categories": categories}
+    )
+
+@app.get("/knowledge-base/{category_id}")
+@login_required
+async def view_category(
+    request: Request,
+    category_id: int,
+    db: Session = Depends(get_db)
+):
+    """Display a specific knowledge category with its comments."""
+    category = db.query(KnowledgeCategory).filter(KnowledgeCategory.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    return templates.TemplateResponse(
+        "knowledge_category.html",
+        {
+            "request": request, 
+            "category": category,
+            "current_user": request.state.user
+        }
+    )
+
+@app.post("/knowledge-base/{category_id}/comments")
+@login_required
+async def add_comment(
+    request: Request,
+    category_id: int,
+    comment_text: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    comment = Comment(
+        category_id=category_id,
+        user_id=user.id,
+        content=comment_text,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    
+    try:
+        db.add(comment)
+        db.commit()
+        db.refresh(comment)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    return RedirectResponse(url=f"/knowledge-base/{category_id}", status_code=303)
+
+@app.post("/knowledge-base/comments/{comment_id}/like")
+@login_required
+async def like_comment(request: Request, comment_id: int, db: Session = Depends(get_db)):
+    """Like a comment."""
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    comment = db.query(Comment).filter(Comment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    # Increment likes
+    comment.likes = (comment.likes or 0) + 1
+    db.commit()
+
+    # Return to the category page
+    return RedirectResponse(
+        url=f"/knowledge-base/{comment.category_id}",
+        status_code=status.HTTP_303_SEE_OTHER
+    )
+
+@app.post("/knowledge-base/comments/{comment_id}/delete")
+@login_required
+async def delete_comment(
+    request: Request,
+    comment_id: int,
+    db: Session = Depends(get_db)
+):
+    """Delete a comment."""
+    comment = db.query(Comment).filter(Comment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    
+    if comment.user_id != request.state.user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this comment")
+    
+    category_id = comment.category_id
+    db.delete(comment)
+    db.commit()
+    
+    return RedirectResponse(
+        url=f"/knowledge-base/{category_id}",
+        status_code=status.HTTP_303_SEE_OTHER
     )
 
 if __name__ == "__main__":

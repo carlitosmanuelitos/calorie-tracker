@@ -548,12 +548,76 @@ async def delete_comment(
     )
 
 @app.get("/meal-tracker")
+@login_required
+async def meal_tracker_home(request: Request, db: Session = Depends(get_db)):
+    """Meal tracker home page - redirects to current month."""
+    today = datetime.now()
+    return RedirectResponse(
+        url=f"/meal-tracker/{today.year}/{today.month}",
+        status_code=status.HTTP_303_SEE_OTHER
+    )
+
+@app.get("/meal-tracker/view/{date}")
+@login_required
+async def view_day(request: Request, date: str, db: Session = Depends(get_db)):
+    """Show detailed view of a specific day's meals."""
+    user = request.state.user
+    if not user:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+    
+    try:
+        # Parse the date string to datetime in UTC
+        view_date = datetime.strptime(f"{date} 00:00:00", '%Y-%m-%d %H:%M:%S')
+        next_day = datetime.strptime(f"{date} 23:59:59", '%Y-%m-%d %H:%M:%S')
+        
+        # Get all meals for the specified day
+        meals = (
+            db.query(MealLog)
+            .filter(
+                MealLog.user_id == user.id,
+                MealLog.date >= view_date,
+                MealLog.date <= next_day
+            )
+            .options(selectinload(MealLog.components))
+            .order_by(MealLog.date)
+            .all()
+        )
+        
+        # Calculate totals for each meal and the day
+        day_totals = {"calories": 0, "protein": 0, "carbs": 0, "fat": 0}
+        meal_details = []
+        
+        for meal in meals:
+            meal_totals = {
+                "meal_type": meal.meal_type.value,
+                "date": meal.date.strftime('%Y-%m-%d %H:%M:%S'),
+                "total_calories": sum(c.calories or 0 for c in meal.components),
+                "total_protein": sum(c.protein or 0 for c in meal.components),
+                "total_carbs": sum(c.carbs or 0 for c in meal.components),
+                "total_fat": sum(c.fat or 0 for c in meal.components)
+            }
+            day_totals["calories"] += meal_totals["total_calories"]
+            day_totals["protein"] += meal_totals["total_protein"]
+            day_totals["carbs"] += meal_totals["total_carbs"]
+            day_totals["fat"] += meal_totals["total_fat"]
+            meal_details.append(meal_totals)
+        
+        return {
+            "meals": meal_details,
+            "totals": day_totals
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+
 @app.get("/meal-tracker/{year}/{month}")
 @login_required
 async def meal_tracker(
     request: Request,
-    year: Optional[int] = None,
-    month: Optional[int] = None,
+    year: int,
+    month: int,
     db: Session = Depends(get_db)
 ):
     """Meal tracker page."""
@@ -628,123 +692,6 @@ async def meal_tracker(
             "calendar_weeks": calendar_weeks
         }
     )
-
-@app.get("/meal-tracker/{year}/{month}/{day}")
-@login_required
-async def view_day(request: Request, year: int, month: int, day: int):
-    """Show detailed view of a specific day's meals."""
-    user = request.state.user
-    if not user:
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-    
-    try:
-        view_date = datetime(year, month, day)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date")
-    
-    db = next(get_db())
-    try:
-        meals = (
-            db.query(MealLog)
-            .filter(
-                MealLog.user_id == user.id,
-                MealLog.date >= view_date,
-                MealLog.date < view_date + timedelta(days=1)
-            )
-            .options(selectinload(MealLog.components))
-            .all()
-        )
-        
-        # Calculate daily totals
-        daily_totals = {
-            "calories": sum(
-                sum(c.calories for c in meal.components)
-                for meal in meals
-            ),
-            "protein": sum(
-                sum(c.protein or 0 for c in meal.components)
-                for meal in meals
-            ),
-            "carbs": sum(
-                sum(c.carbs or 0 for c in meal.components)
-                for meal in meals
-            ),
-            "fat": sum(
-                sum(c.fat or 0 for c in meal.components)
-                for meal in meals
-            )
-        }
-        
-        # Get favorite meals for quick add
-        favorite_meals = (
-            db.query(FavoriteMeal)
-            .filter(FavoriteMeal.user_id == user.id)
-            .options(selectinload(FavoriteMeal.components))
-            .all()
-        )
-        
-    finally:
-        db.close()
-    
-    return templates.TemplateResponse(
-        "meal_tracker_day.html",
-        {
-            "request": request,
-            "current_user": user,
-            "date": view_date,
-            "meals": meals,
-            "daily_totals": daily_totals,
-            "favorite_meals": favorite_meals,
-            "meal_types": list(MealType),
-            "food_categories": list(FoodCategory),
-            "unit_types": list(UnitType)
-        }
-    )
-
-@app.get("/meal-tracker/day/{date}")
-@login_required
-async def view_day(request: Request, date: str, db: Session = Depends(get_db)):
-    """Show detailed view of a specific day's meals."""
-    user = request.state.user
-    try:
-        # Parse the date string to datetime
-        day_date = datetime.strptime(date, '%Y-%m-%d')
-        next_day = day_date + timedelta(days=1)
-        
-        # Get all meals for the specified day
-        meals = db.query(MealLog)\
-            .filter(
-                MealLog.user_id == user.id,
-                MealLog.date >= day_date,
-                MealLog.date < next_day
-            )\
-            .order_by(MealLog.date)\
-            .all()
-        
-        # Calculate totals for each meal and the day
-        day_totals = {"calories": 0, "protein": 0, "carbs": 0}
-        meal_details = []
-        
-        for meal in meals:
-            meal_totals = {
-                "meal_type": meal.meal_type.value,
-                "date": meal.date.isoformat(),
-                "total_calories": sum(c.calories for c in meal.components),
-                "total_protein": sum(c.protein for c in meal.components),
-                "total_carbs": sum(c.carbs for c in meal.components)
-            }
-            day_totals["calories"] += meal_totals["total_calories"]
-            day_totals["protein"] += meal_totals["total_protein"]
-            day_totals["carbs"] += meal_totals["total_carbs"]
-            meal_details.append(meal_totals)
-        
-        return {
-            "meals": meal_details,
-            "totals": day_totals
-        }
-        
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format")
 
 @app.post("/meal-tracker/add-meal")
 @login_required

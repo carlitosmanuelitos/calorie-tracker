@@ -52,7 +52,7 @@
                         {% for day in week %}
                             {% if day.date %}
                                 <div class="aspect-square p-1">
-                                    <button onclick="showDayDetails('{{ day.date }}')" 
+                                    <button onclick="showDayDetails('{{ day.date.strftime('%Y-%m-%d') }}')" 
                                             class="w-full h-full rounded-lg p-1 text-sm hover:bg-gray-50 relative
                                             {% if day.date == today %}bg-indigo-50 font-bold{% endif %}
                                             {% if day.has_meals %}border-2 border-indigo-500{% else %}border border-gray-200{% endif %}">
@@ -372,9 +372,21 @@
 
     <script>
     function showDayDetails(date) {
-        fetch(`/meal-tracker/day/${date}`)
-            .then(response => response.json())
+        console.log('Fetching details for date:', date);  // Debug log
+        
+        fetch(`/meal-tracker/view/${date}`)
+            .then(response => {
+                console.log('Response status:', response.status);  // Debug log
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        console.log('Error response:', text);  // Debug log
+                        throw new Error(`Network response was not ok: ${text}`);
+                    });
+                }
+                return response.json();
+            })
             .then(data => {
+                console.log('Received data:', data);  // Debug log
                 const summary = document.getElementById('dailySummary');
                 if (data.meals && data.meals.length > 0) {
                     let html = `<h4 class="text-lg font-medium mb-2">${new Date(date).toLocaleDateString()}</h4>`;
@@ -390,6 +402,7 @@
                                     <div>Calories: ${meal.total_calories} kcal</div>
                                     <div>Protein: ${meal.total_protein}g</div>
                                     <div>Carbs: ${meal.total_carbs}g</div>
+                                    <div>Fat: ${meal.total_fat}g</div>
                                 </div>
                             </div>
                         `;
@@ -402,6 +415,7 @@
                                 <div>Calories: ${data.totals.calories} kcal</div>
                                 <div>Protein: ${data.totals.protein}g</div>
                                 <div>Carbs: ${data.totals.carbs}g</div>
+                                <div>Fat: ${data.totals.fat}g</div>
                             </div>
                         </div>
                     `;

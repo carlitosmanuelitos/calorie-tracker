@@ -30,8 +30,10 @@ class User(Base):
     reset_token = Column(String, unique=True, index=True, nullable=True)
     reset_token_expires = Column(DateTime, nullable=True)
 
-    # Relationship
+    # Relationships
     profile = relationship("UserProfile", back_populates="user", uselist=False)
+    meal_logs = relationship("MealLog", back_populates="user", cascade="all, delete-orphan")
+    favorite_meals = relationship("FavoriteMeal", back_populates="user", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="user")
 
 class UserProfile(Base):

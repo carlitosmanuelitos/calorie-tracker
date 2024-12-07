@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">Meal Tracker</h1>
+        <button onclick="openModal()" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <svg class="h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+            </svg>
+            Add Meal
+        </button>
+    </div>
+
+    <!-- Calendar Navigation -->
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex space-x-2">
+            <a href="/meal-tracker/{{ prev_month.year }}/{{ prev_month.month }}" class="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+                Previous Month
+            </a>
+            <h2 class="text-2xl font-bold">{{ month | month_name }} {{ year }}</h2>
+            <a href="/meal-tracker/{{ next_month.year }}/{{ next_month.month }}" class="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                Next Month
+                <svg class="h-5 w-5 ml-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                </svg>
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Calendar View -->
+        <div class="lg:col-span-2">
+            <div class="bg-white shadow rounded-lg p-4">
+                <!-- Days of Week Header -->
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    {% for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}
+                    <div class="text-center text-sm font-medium text-gray-700">
+                        {{ day }}
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Calendar Grid -->
+                <div class="grid grid-cols-7 gap-1">
+                    {% for week in calendar_weeks %}
+                        {% for day in week %}
+                            {% if day.date %}
+                                <div class="aspect-square p-1">
+                                    <button onclick="showDayDetails('{{ day.date }}')" 
+                                            class="w-full h-full rounded-lg p-1 text-sm hover:bg-gray-50 relative
+                                            {% if day.date == today %}bg-indigo-50 font-bold{% endif %}
+                                            {% if day.has_meals %}border-2 border-indigo-500{% else %}border border-gray-200{% endif %}">
+                                        <span class="absolute top-1 left-1">{{ day.date.day }}</span>
+                                        {% if day.has_meals %}
+                                            <span class="absolute bottom-1 right-1 w-2 h-2 bg-indigo-500 rounded-full"></span>
+                                        {% endif %}
+                                    </button>
+                                </div>
+                            {% else %}
+                                <div class="aspect-square p-1">
+                                    <div class="w-full h-full rounded-lg border border-gray-100 bg-gray-50"></div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Summary Panel -->
+        <div class="lg:col-span-1">
+            <div class="bg-white shadow rounded-lg p-4">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Daily Summary</h3>
+                <div id="dailySummary">
+                    <p class="text-gray-500 text-sm">Select a day to view details</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Meals List -->
+    <div class="mt-8">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">Recent Meals</h3>
+        <div class="space-y-4">
+            {% for meal in meal_logs %}
+            <div class="bg-white shadow rounded-lg p-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-medium">{{ meal.date.strftime('%B %d, %Y %I:%M %p') }}</h3>
+                        <p class="text-sm text-gray-500">{{ meal.meal_type | title }}</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button class="text-indigo-600 hover:text-indigo-800">Edit</button>
+                        <button class="text-red-600 hover:text-red-800">Delete</button>
+                    </div>
+                </div>
+                
+                {% if meal.components %}
+                <div class="mt-4">
+                    <h4 class="text-sm font-medium text-gray-700 mb-2">Components</h4>
+                    <div class="grid grid-cols-6 gap-4 text-sm text-gray-600">
+                        <div class="font-medium">Food Item</div>
+                        <div class="font-medium">Category</div>
+                        <div class="font-medium">Quantity</div>
+                        <div class="font-medium">Calories</div>
+                        <div class="font-medium">Protein</div>
+                        <div class="font-medium">Carbs</div>
+                    </div>
+                    {% for component in meal.components %}
+                    <div class="grid grid-cols-6 gap-4 text-sm text-gray-600 mt-1">
+                        <div>{{ component.food_item }}</div>
+                        <div>{{ component.category | title }}</div>
+                        <div>{{ component.quantity }} {{ component.unit }}</div>
+                        <div>{{ component.calories }} kcal</div>
+                        <div>{{ component.protein }}g</div>
+                        <div>{{ component.carbs }}g</div>
+                    </div>
+                    {% endfor %}
+                    
+                    <!-- Totals -->
+                    <div class="mt-2 pt-2 border-t grid grid-cols-6 gap-4 text-sm font-medium">
+                        <div class="col-span-3 text-right">Total:</div>
+                        <div>{{ meal.components | sum(attribute='calories') }} kcal</div>
+                        <div>{{ meal.components | sum(attribute='protein') }}g</div>
+                        <div>{{ meal.components | sum(attribute='carbs') }}g</div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if meal.notes %}
+                <div class="mt-4 text-sm text-gray-600">
+                    <p class="font-medium">Notes:</p>
+                    <p>{{ meal.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Add Meal Modal -->
+    <div id="addMealModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-5xl">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Add New Meal</h3>
+                </div>
+                <form id="addMealForm" method="POST" action="/meal-tracker/add-meal" class="p-6">
+                    <div class="space-y-6">
+                        <!-- Date and Time -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="date" class="block text-sm font-medium text-gray-700">Date</label>
+                                <input type="date" name="date" id="date" required
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="time" class="block text-sm font-medium text-gray-700">Time</label>
+                                <input type="time" name="time" id="time" required
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                        </div>
+
+                        <!-- Meal Type -->
+                        <div>
+                            <label for="meal_type" class="block text-sm font-medium text-gray-700">Meal Type</label>
+                            <select name="meal_type" id="meal_type" required
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                {% for meal_type in meal_types %}
+                                    <option value="{{ meal_type.value }}">{{ meal_type.value | title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Quick Add from Favorites -->
+                        {% if favorite_meals %}
+                            <div>
+                                <label for="favorite_meal" class="block text-sm font-medium text-gray-700">Quick Add from Favorites</label>
+                                <select name="favorite_meal" id="favorite_meal"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <option value="">Select a favorite meal...</option>
+                                    {% for meal in favorite_meals %}
+                                        <option value="{{ meal.id }}">{{ meal.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        {% endif %}
+
+                        <!-- Components -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-4">Components</label>
+                            <div class="mb-2 grid grid-cols-12 gap-4 text-sm font-medium text-gray-700">
+                                <div class="col-span-3">Food Item</div>
+                                <div class="col-span-2">Category</div>
+                                <div class="col-span-2">Quantity</div>
+                                <div class="col-span-1">Calories</div>
+                                <div class="col-span-1">Protein</div>
+                                <div class="col-span-1">Carbs</div>
+                                <div class="col-span-1">Fat</div>
+                                <div class="col-span-1"></div>
+                            </div>
+                            <div id="components" class="space-y-4">
+                                <!-- Component template will be cloned here -->
+                            </div>
+                            <button type="button" onclick="addComponent()" class="mt-2 inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                                <svg class="-ml-1 mr-2 h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+                                </svg>
+                                Add Component
+                            </button>
+                        </div>
+
+                        <!-- Notes -->
+                        <div>
+                            <label for="notes" class="block text-sm font-medium text-gray-700">Notes</label>
+                            <textarea name="notes" id="notes" rows="3"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex items-center justify-end space-x-3">
+                        <button type="button" onclick="closeModal()" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                            Cancel
+                        </button>
+                        <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Save Meal
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Component Template (hidden) -->
+    <template id="componentTemplate">
+        <div class="grid grid-cols-12 gap-4 items-center component-row">
+            <div class="col-span-3">
+                <input type="text" name="components[INDEX][food_item]" required
+                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="Food item name">
+            </div>
+            <div class="col-span-2">
+                <select name="components[INDEX][category]" required
+                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    {% for category in food_categories %}
+                        <option value="{{ category.value }}">{{ category.value | title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-span-2 flex space-x-2">
+                <input type="number" name="components[INDEX][quantity]" required min="0" step="0.1"
+                    class="block w-2/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="Amount">
+                <select name="components[INDEX][unit]" required
+                    class="block w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    {% for unit in unit_types %}
+                        <option value="{{ unit.value }}">{{ unit.value | title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-span-1">
+                <input type="number" name="components[INDEX][calories]" required min="0"
+                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="kcal">
+            </div>
+            <div class="col-span-1">
+                <input type="number" name="components[INDEX][protein]" min="0" step="0.1"
+                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="g">
+            </div>
+            <div class="col-span-1">
+                <input type="number" name="components[INDEX][carbs]" min="0" step="0.1"
+                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="g">
+            </div>
+            <div class="col-span-1">
+                <input type="number" name="components[INDEX][fat]" min="0" step="0.1"
+                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="g">
+            </div>
+            <div class="col-span-1">
+                <button type="button" onclick="removeComponent(this)" class="text-red-600 hover:text-red-800">
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </template>
+
+    <script>
+    let componentIndex = 0;
+
+    function addComponent() {
+        const template = document.getElementById('componentTemplate');
+        const componentsDiv = document.getElementById('components');
+        const clone = template.content.cloneNode(true);
+        
+        // Replace INDEX placeholder with actual index
+        const elements = clone.querySelectorAll('[name*="INDEX"]');
+        elements.forEach(element => {
+            element.name = element.name.replace('INDEX', componentIndex);
+        });
+        
+        componentIndex++;
+        componentsDiv.appendChild(clone);
+    }
+
+    function removeComponent(button) {
+        const componentRow = button.closest('.component-row');
+        componentRow.remove();
+    }
+
+    function openModal() {
+        const modal = document.getElementById('addMealModal');
+        modal.classList.remove('hidden');
+        
+        // Initialize form if it's empty
+        if (document.querySelectorAll('.component-row').length === 0) {
+            addComponent();
+        }
+        
+        // Set current date and time
+        const now = new Date();
+        const dateInput = document.getElementById('date');
+        const timeInput = document.getElementById('time');
+        
+        // Format date as YYYY-MM-DD
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        dateInput.value = `${year}-${month}-${day}`;
+        
+        // Format time as HH:MM
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        timeInput.value = `${hours}:${minutes}`;
+    }
+
+    function closeModal() {
+        const modal = document.getElementById('addMealModal');
+        modal.classList.add('hidden');
+        // Clear the form
+        document.getElementById('addMealForm').reset();
+        document.getElementById('components').innerHTML = '';
+        componentIndex = 0;
+    }
+
+    // Event Listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add click handler for the Add Meal button
+        const addMealButton = document.querySelector('[onclick="openModal()"]');
+        if (addMealButton) {
+            addMealButton.addEventListener('click', openModal);
+        }
+        
+        // Close modal when clicking outside
+        const modal = document.getElementById('addMealModal');
+        modal.addEventListener('click', function(event) {
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+    });
+    </script>
+
+    <script>
+    function showDayDetails(date) {
+        fetch(`/meal-tracker/day/${date}`)
+            .then(response => response.json())
+            .then(data => {
+                const summary = document.getElementById('dailySummary');
+                if (data.meals && data.meals.length > 0) {
+                    let html = `<h4 class="text-lg font-medium mb-2">${new Date(date).toLocaleDateString()}</h4>`;
+                    html += `<div class="space-y-4">`;
+                    data.meals.forEach(meal => {
+                        html += `
+                            <div class="border-b pb-2">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-medium">${meal.meal_type}</span>
+                                    <span class="text-sm text-gray-500">${new Date(meal.date).toLocaleTimeString()}</span>
+                                </div>
+                                <div class="mt-2 text-sm">
+                                    <div>Calories: ${meal.total_calories} kcal</div>
+                                    <div>Protein: ${meal.total_protein}g</div>
+                                    <div>Carbs: ${meal.total_carbs}g</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                    html += `
+                        <div class="mt-4 pt-4 border-t">
+                            <div class="font-medium">Daily Totals:</div>
+                            <div class="text-sm">
+                                <div>Calories: ${data.totals.calories} kcal</div>
+                                <div>Protein: ${data.totals.protein}g</div>
+                                <div>Carbs: ${data.totals.carbs}g</div>
+                            </div>
+                        </div>
+                    `;
+                    summary.innerHTML = html;
+                } else {
+                    summary.innerHTML = `
+                        <h4 class="text-lg font-medium mb-2">${new Date(date).toLocaleDateString()}</h4>
+                        <p class="text-gray-500">No meals recorded for this day</p>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('dailySummary').innerHTML = `
+                    <p class="text-red-500">Error loading meal details</p>
+                `;
+            });
+    }
+    </script>
+{% endblock %}

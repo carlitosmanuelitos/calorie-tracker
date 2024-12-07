@@ -4,10 +4,13 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
 from pathlib import Path
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Dict
 from functools import wraps
 import secrets
 from datetime import datetime, timedelta
+from calendar import monthcalendar
+from sqlalchemy.orm import selectinload
+from .models.meal import MealLog, MealComponent, FavoriteMeal, FavoriteMealComponent, MealType, FoodCategory, UnitType
 
 from app.core.config import settings
 from app.core.security import verify_password, get_password_hash, create_access_token, get_current_user_from_token
@@ -25,6 +28,7 @@ from app.schemas.survey import (
 )
 from app.schemas.knowledge import KnowledgeCategoryCreate, CommentCreate
 from pydantic import ValidationError
+from .models.meal import MealLog, MealComponent, FavoriteMeal, FavoriteMealComponent, MealType, FoodCategory, UnitType
 
 """
 FastAPI application for the Calorie Tracker web application.
@@ -54,6 +58,13 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Templates
 templates = Jinja2Templates(directory="templates")
+
+# Add custom Jinja2 filters
+def month_name(month_number):
+    """Convert month number to month name."""
+    return datetime(2000, month_number, 1).strftime('%B')
+
+templates.env.filters["month_name"] = month_name
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -535,6 +546,573 @@ async def delete_comment(
         url=f"/knowledge-base/{category_id}",
         status_code=status.HTTP_303_SEE_OTHER
     )
+
+@app.get("/meal-tracker")
+@app.get("/meal-tracker/{year}/{month}")
+@login_required
+async def meal_tracker(
+    request: Request,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """Meal tracker page."""
+    user = request.state.user
+    if not user:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    # If no year/month provided, use current date
+    today = datetime.now()
+    year = year or today.year
+    month = month or today.month
+
+    # Calculate previous and next month
+    if month == 1:
+        prev_month = datetime(year - 1, 12, 1)
+    else:
+        prev_month = datetime(year, month - 1, 1)
+        
+    if month == 12:
+        next_month = datetime(year + 1, 1, 1)
+        end_date = datetime(year + 1, 1, 1)
+    else:
+        next_month = datetime(year, month + 1, 1)
+        end_date = datetime(year, month + 1, 1)
+
+    # Get start date for current month
+    start_date = datetime(year, month, 1)
+
+    # Get meal logs for the specified month
+    meal_logs = db.query(MealLog)\
+        .filter(
+            MealLog.user_id == user.id,
+            MealLog.date >= start_date,
+            MealLog.date < end_date
+        )\
+        .order_by(MealLog.date.desc())\
+        .all()
+
+    # Generate calendar weeks
+    cal = monthcalendar(year, month)
+    calendar_weeks = []
+    meal_dates = {meal.date.date() for meal in meal_logs}
+    
+    for week in cal:
+        calendar_week = []
+        for day in week:
+            if day == 0:
+                calendar_week.append({"date": None})
+            else:
+                current_date = datetime(year, month, day).date()
+                calendar_week.append({
+                    "date": current_date,
+                    "has_meals": current_date in meal_dates
+                })
+        calendar_weeks.append(calendar_week)
+
+    # Pass enum values and navigation data to template
+    return templates.TemplateResponse(
+        "meal_tracker.html",
+        {
+            "request": request,
+            "meal_logs": meal_logs,
+            "meal_types": list(MealType),
+            "food_categories": list(FoodCategory),
+            "unit_types": list(UnitType),
+            "year": year,
+            "month": month,
+            "today": today.date(),
+            "prev_month": prev_month,
+            "next_month": next_month,
+            "current_user": user,
+            "calendar_weeks": calendar_weeks
+        }
+    )
+
+@app.get("/meal-tracker/{year}/{month}/{day}")
+@login_required
+async def view_day(request: Request, year: int, month: int, day: int):
+    """Show detailed view of a specific day's meals."""
+    user = request.state.user
+    if not user:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+    
+    try:
+        view_date = datetime(year, month, day)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date")
+    
+    db = next(get_db())
+    try:
+        meals = (
+            db.query(MealLog)
+            .filter(
+                MealLog.user_id == user.id,
+                MealLog.date >= view_date,
+                MealLog.date < view_date + timedelta(days=1)
+            )
+            .options(selectinload(MealLog.components))
+            .all()
+        )
+        
+        # Calculate daily totals
+        daily_totals = {
+            "calories": sum(
+                sum(c.calories for c in meal.components)
+                for meal in meals
+            ),
+            "protein": sum(
+                sum(c.protein or 0 for c in meal.components)
+                for meal in meals
+            ),
+            "carbs": sum(
+                sum(c.carbs or 0 for c in meal.components)
+                for meal in meals
+            ),
+            "fat": sum(
+                sum(c.fat or 0 for c in meal.components)
+                for meal in meals
+            )
+        }
+        
+        # Get favorite meals for quick add
+        favorite_meals = (
+            db.query(FavoriteMeal)
+            .filter(FavoriteMeal.user_id == user.id)
+            .options(selectinload(FavoriteMeal.components))
+            .all()
+        )
+        
+    finally:
+        db.close()
+    
+    return templates.TemplateResponse(
+        "meal_tracker_day.html",
+        {
+            "request": request,
+            "current_user": user,
+            "date": view_date,
+            "meals": meals,
+            "daily_totals": daily_totals,
+            "favorite_meals": favorite_meals,
+            "meal_types": list(MealType),
+            "food_categories": list(FoodCategory),
+            "unit_types": list(UnitType)
+        }
+    )
+
+@app.get("/meal-tracker/day/{date}")
+@login_required
+async def view_day(request: Request, date: str, db: Session = Depends(get_db)):
+    """Show detailed view of a specific day's meals."""
+    user = request.state.user
+    try:
+        # Parse the date string to datetime
+        day_date = datetime.strptime(date, '%Y-%m-%d')
+        next_day = day_date + timedelta(days=1)
+        
+        # Get all meals for the specified day
+        meals = db.query(MealLog)\
+            .filter(
+                MealLog.user_id == user.id,
+                MealLog.date >= day_date,
+                MealLog.date < next_day
+            )\
+            .order_by(MealLog.date)\
+            .all()
+        
+        # Calculate totals for each meal and the day
+        day_totals = {"calories": 0, "protein": 0, "carbs": 0}
+        meal_details = []
+        
+        for meal in meals:
+            meal_totals = {
+                "meal_type": meal.meal_type.value,
+                "date": meal.date.isoformat(),
+                "total_calories": sum(c.calories for c in meal.components),
+                "total_protein": sum(c.protein for c in meal.components),
+                "total_carbs": sum(c.carbs for c in meal.components)
+            }
+            day_totals["calories"] += meal_totals["total_calories"]
+            day_totals["protein"] += meal_totals["total_protein"]
+            day_totals["carbs"] += meal_totals["total_carbs"]
+            meal_details.append(meal_totals)
+        
+        return {
+            "meals": meal_details,
+            "totals": day_totals
+        }
+        
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format")
+
+@app.post("/meal-tracker/add-meal")
+@login_required
+async def add_meal(
+    request: Request,
+    date: str = Form(...),
+    time: str = Form(...),
+    meal_type: str = Form(...),
+    favorite_meal: Optional[int] = Form(None),
+    notes: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Add a new meal log."""
+    user = request.state.user
+    if not user:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+    
+    try:
+        # Parse the date and time
+        meal_datetime = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        
+        # Create new meal log with proper enum value
+        new_meal = MealLog(
+            user_id=user.id,
+            date=meal_datetime,
+            meal_type=MealType(meal_type.lower()),  # Convert string to enum
+            notes=notes
+        )
+        db.add(new_meal)
+        db.flush()  # This assigns the ID to new_meal without committing the transaction
+        
+        # Get form data for components
+        form_data = await request.form()
+        component_data = []
+        
+        # Process each form field to extract component data
+        for key, value in form_data.items():
+            if key.startswith('components[') and '][food_item]' in key:
+                # Extract the index from the key
+                index = key[key.find('[')+1:key.find(']')]
+                
+                # Get all related component fields
+                food_item = form_data.get(f'components[{index}][food_item]')
+                category = form_data.get(f'components[{index}][category]')
+                quantity = float(form_data.get(f'components[{index}][quantity]', 0))
+                unit = form_data.get(f'components[{index}][unit]')
+                calories = float(form_data.get(f'components[{index}][calories]', 0))
+                protein = float(form_data.get(f'components[{index}][protein]', 0))
+                carbs = float(form_data.get(f'components[{index}][carbs]', 0))
+                fat = float(form_data.get(f'components[{index}][fat]', 0))
+                
+                if food_item and category:  # Only add if required fields are present
+                    component = MealComponent(
+                        meal_log_id=new_meal.id,  # Now we have the meal_log_id
+                        food_item=food_item,
+                        category=FoodCategory(category.lower()),  # Convert string to enum
+                        quantity=quantity,
+                        unit=UnitType(unit.lower()),  # Convert string to enum
+                        calories=calories,
+                        protein=protein,
+                        carbs=carbs,
+                        fat=fat
+                    )
+                    db.add(component)
+        
+        db.commit()
+        
+        # Redirect back to the meal tracker page
+        return RedirectResponse(
+            url=f"/meal-tracker/{meal_datetime.year}/{meal_datetime.month}",
+            status_code=status.HTTP_303_SEE_OTHER
+        )
+        
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+@app.post("/api/meals")
+@login_required
+async def add_meal(
+    request: Request,
+    date: str = Form(...),
+    time: str = Form(...),
+    meal_type: str = Form(...),
+    favorite_meal: Optional[int] = Form(None),
+    notes: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Add a new meal log."""
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    try:
+        meal_date = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date or time format")
+    
+    db = next(get_db())
+    try:
+        # Create meal log
+        meal = MealLog(
+            user_id=user.id,
+            date=meal_date,
+            meal_type=meal_type,
+            notes=notes
+        )
+        db.add(meal)
+        
+        # Add components
+        form_data = await request.form()
+        for key, value in form_data.items():
+            if key.startswith('components[') and '][food_item]' in key:
+                # Extract the index from the key
+                index = key[key.find('[')+1:key.find(']')]
+                
+                # Get all related component fields
+                food_item = form_data.get(f'components[{index}][food_item]')
+                category = form_data.get(f'components[{index}][category]')
+                quantity = float(form_data.get(f'components[{index}][quantity]', 0))
+                unit = form_data.get(f'components[{index}][unit]')
+                calories = float(form_data.get(f'components[{index}][calories]', 0))
+                protein = float(form_data.get(f'components[{index}][protein]', 0))
+                carbs = float(form_data.get(f'components[{index}][carbs]', 0))
+                fat = float(form_data.get(f'components[{index}][fat]', 0))
+                
+                if food_item and category:  # Only add if required fields are present
+                    component = MealComponent(
+                        meal_id=meal.id,
+                        food_item=food_item,
+                        category=category,
+                        quantity=quantity,
+                        unit=unit,
+                        calories=calories,
+                        protein=protein,
+                        carbs=carbs,
+                        fat=fat
+                    )
+                    db.add(component)
+        
+        db.commit()
+        return {"message": "Meal added successfully", "id": meal.id}
+    
+    finally:
+        db.close()
+
+@app.get("/api/meals/{meal_id}")
+@login_required
+async def get_meal(request: Request, meal_id: int):
+    """Get a specific meal log."""
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    db = next(get_db())
+    try:
+        meal = (
+            db.query(MealLog)
+            .filter(MealLog.id == meal_id, MealLog.user_id == user.id)
+            .options(selectinload(MealLog.components))
+            .first()
+        )
+        
+        if not meal:
+            raise HTTPException(status_code=404, detail="Meal not found")
+        
+        return {
+            "id": meal.id,
+            "date": meal.date.strftime("%Y-%m-%d"),
+            "time": meal.date.strftime("%H:%M"),
+            "meal_type": meal.meal_type,
+            "notes": meal.notes,
+            "components": [
+                {
+                    "food_item": c.food_item,
+                    "category": c.category,
+                    "quantity": c.quantity,
+                    "unit": c.unit,
+                    "calories": c.calories,
+                    "protein": c.protein,
+                    "carbs": c.carbs,
+                    "fat": c.fat
+                }
+                for c in meal.components
+            ]
+        }
+    
+    finally:
+        db.close()
+
+@app.put("/api/meals/{meal_id}")
+@login_required
+async def update_meal(
+    request: Request,
+    meal_id: int,
+    date: str = Form(...),
+    time: str = Form(...),
+    meal_type: str = Form(...),
+    notes: str = Form(None),
+    components: List[Dict] = Form(...)
+):
+    """Update an existing meal log."""
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    try:
+        meal_date = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date or time format")
+    
+    db = next(get_db())
+    try:
+        meal = (
+            db.query(MealLog)
+            .filter(MealLog.id == meal_id, MealLog.user_id == user.id)
+            .first()
+        )
+        
+        if not meal:
+            raise HTTPException(status_code=404, detail="Meal not found")
+        
+        # Update meal
+        meal.date = meal_date
+        meal.meal_type = meal_type
+        meal.notes = notes
+        
+        # Delete existing components
+        db.query(MealComponent).filter(MealComponent.meal_id == meal_id).delete()
+        
+        # Add new components
+        for comp in components:
+            component = MealComponent(
+                meal_id=meal.id,
+                food_item=comp["food_item"],
+                category=comp["category"],
+                quantity=float(comp["quantity"]),
+                unit=comp["unit"],
+                calories=int(comp["calories"]),
+                protein=float(comp["protein"]) if comp.get("protein") else None,
+                carbs=float(comp["carbs"]) if comp.get("carbs") else None,
+                fat=float(comp["fat"]) if comp.get("fat") else None
+            )
+            db.add(component)
+        
+        db.commit()
+        return {"message": "Meal updated successfully"}
+    
+    finally:
+        db.close()
+
+@app.delete("/api/meals/{meal_id}")
+@login_required
+async def delete_meal(request: Request, meal_id: int):
+    """Delete a meal log."""
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    db = next(get_db())
+    try:
+        meal = (
+            db.query(MealLog)
+            .filter(MealLog.id == meal_id, MealLog.user_id == user.id)
+            .first()
+        )
+        
+        if not meal:
+            raise HTTPException(status_code=404, detail="Meal not found")
+        
+        db.delete(meal)
+        db.commit()
+        return {"message": "Meal deleted successfully"}
+    
+    finally:
+        db.close()
+
+@app.get("/api/favorite-meals/{meal_id}")
+@login_required
+async def get_favorite_meal(request: Request, meal_id: int):
+    """Get a specific favorite meal."""
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    db = next(get_db())
+    try:
+        meal = (
+            db.query(FavoriteMeal)
+            .filter(FavoriteMeal.id == meal_id, FavoriteMeal.user_id == user.id)
+            .options(selectinload(FavoriteMeal.components))
+            .first()
+        )
+        
+        if not meal:
+            raise HTTPException(status_code=404, detail="Favorite meal not found")
+        
+        return {
+            "id": meal.id,
+            "name": meal.name,
+            "meal_type": meal.meal_type,
+            "components": [
+                {
+                    "food_item": c.food_item,
+                    "category": c.category,
+                    "quantity": c.quantity,
+                    "unit": c.unit,
+                    "calories": c.calories,
+                    "protein": c.protein,
+                    "carbs": c.carbs,
+                    "fat": c.fat
+                }
+                for c in meal.components
+            ]
+        }
+    
+    finally:
+        db.close()
+
+@app.post("/api/favorite-meals")
+@login_required
+async def add_favorite_meal(
+    request: Request,
+    name: str = Form(...),
+    meal_type: str = Form(...),
+    components: List[Dict] = Form(...)
+):
+    """Add a new favorite meal."""
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    db = next(get_db())
+    try:
+        # Create favorite meal
+        meal = FavoriteMeal(
+            user_id=user.id,
+            name=name,
+            meal_type=meal_type
+        )
+        db.add(meal)
+        db.flush()  # Get meal.id
+        
+        # Add components
+        for comp in components:
+            component = FavoriteMealComponent(
+                meal_id=meal.id,
+                food_item=comp["food_item"],
+                category=comp["category"],
+                quantity=float(comp["quantity"]),
+                unit=comp["unit"],
+                calories=int(comp["calories"]),
+                protein=float(comp["protein"]) if comp.get("protein") else None,
+                carbs=float(comp["carbs"]) if comp.get("carbs") else None,
+                fat=float(comp["fat"]) if comp.get("fat") else None
+            )
+            db.add(component)
+        
+        db.commit()
+        return {"message": "Favorite meal added successfully", "id": meal.id}
+    
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     import uvicorn

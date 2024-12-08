@@ -1,5 +1,12 @@
-from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, Response
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi import (
+    FastAPI, 
+    Depends, 
+    HTTPException, 
+    status, 
+    Form, 
+    Request
+)
+from starlette.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
@@ -29,6 +36,7 @@ from app.schemas.survey import (
 from app.schemas.knowledge import KnowledgeCategoryCreate, CommentCreate
 from pydantic import ValidationError
 from .models.meal import MealLog, MealComponent, FavoriteMeal, FavoriteMealComponent, MealType, FoodCategory, UnitType
+from json.decoder import JSONDecodeError
 
 """
 FastAPI application for the Calorie Tracker web application.
@@ -698,11 +706,6 @@ async def meal_tracker(
 @login_required
 async def add_meal(
     request: Request,
-    date: str = Form(...),
-    time: str = Form(...),
-    meal_type: str = Form(...),
-    favorite_meal: Optional[int] = Form(None),
-    notes: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """Add a new meal log."""
@@ -711,6 +714,23 @@ async def add_meal(
         return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
     
     try:
+        # Determine if this is an AJAX request
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        
+        # Try to parse JSON first, fallback to form data
+        try:
+            body = await request.json()
+            date = body['datetime'].split('T')[0]
+            time = body['datetime'].split('T')[1]
+            meal_type = body['meal_type']
+            notes = body.get('notes')
+        except JSONDecodeError:
+            form_data = await request.form()
+            date = form_data.get('date')
+            time = form_data.get('time')
+            meal_type = form_data.get('meal_type')
+            notes = form_data.get('notes')
+        
         # Parse the date and time
         meal_datetime = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
         
@@ -724,56 +744,88 @@ async def add_meal(
         db.add(new_meal)
         db.flush()  # This assigns the ID to new_meal without committing the transaction
         
-        # Get form data for components
-        form_data = await request.form()
-        component_data = []
+        # Get components
+        try:
+            components = body.get('components', [])
+        except NameError:
+            # Process form components
+            components = []
+            for key, value in form_data.items():
+                if key.startswith('components[') and '][food_item]' in key:
+                    # Extract the index from the key
+                    index = key[key.find('[')+1:key.find(']')]
+                    
+                    # Get all related component fields
+                    food_item = form_data.get(f'components[{index}][food_item]')
+                    category = form_data.get(f'components[{index}][category]')
+                    quantity = float(form_data.get(f'components[{index}][quantity]', 0))
+                    unit = form_data.get(f'components[{index}][unit]')
+                    calories = float(form_data.get(f'components[{index}][calories]', 0))
+                    protein = float(form_data.get(f'components[{index}][protein]', 0))
+                    carbs = float(form_data.get(f'components[{index}][carbs]', 0))
+                    fat = float(form_data.get(f'components[{index}][fat]', 0))
+                    
+                    if food_item and category:
+                        components.append({
+                            'food_item': food_item,
+                            'category': category,
+                            'quantity': quantity,
+                            'unit': unit,
+                            'calories': calories,
+                            'protein': protein,
+                            'carbs': carbs,
+                            'fat': fat
+                        })
         
-        # Process each form field to extract component data
-        for key, value in form_data.items():
-            if key.startswith('components[') and '][food_item]' in key:
-                # Extract the index from the key
-                index = key[key.find('[')+1:key.find(']')]
-                
-                # Get all related component fields
-                food_item = form_data.get(f'components[{index}][food_item]')
-                category = form_data.get(f'components[{index}][category]')
-                quantity = float(form_data.get(f'components[{index}][quantity]', 0))
-                unit = form_data.get(f'components[{index}][unit]')
-                calories = float(form_data.get(f'components[{index}][calories]', 0))
-                protein = float(form_data.get(f'components[{index}][protein]', 0))
-                carbs = float(form_data.get(f'components[{index}][carbs]', 0))
-                fat = float(form_data.get(f'components[{index}][fat]', 0))
-                
-                if food_item and category:  # Only add if required fields are present
-                    component = MealComponent(
-                        meal_log_id=new_meal.id,  # Now we have the meal_log_id
-                        food_item=food_item,
-                        category=FoodCategory(category.lower()),  # Convert string to enum
-                        quantity=quantity,
-                        unit=UnitType(unit.lower()),  # Convert string to enum
-                        calories=calories,
-                        protein=protein,
-                        carbs=carbs,
-                        fat=fat
-                    )
-                    db.add(component)
+        # Add meal components
+        for component_data in components:
+            component = MealComponent(
+                meal_log_id=new_meal.id,
+                food_item=component_data.get('food_item', ''),
+                category=FoodCategory(component_data.get('category', 'other').lower()),
+                quantity=float(component_data.get('quantity', 0)),
+                unit=UnitType(component_data.get('unit', 'piece').lower()),
+                calories=int(component_data.get('calories', 0)),
+                protein=float(component_data.get('protein', 0)),
+                carbs=float(component_data.get('carbs', 0)),
+                fat=float(component_data.get('fat', 0))
+            )
+            db.add(component)
         
         db.commit()
         
-        # Redirect back to the meal tracker page
-        return RedirectResponse(
-            url=f"/meal-tracker/{meal_datetime.year}/{meal_datetime.month}",
-            status_code=status.HTTP_303_SEE_OTHER
-        )
+        # Return JSON for AJAX requests, otherwise redirect
+        if is_ajax:
+            return JSONResponse({
+                "status": "success", 
+                "message": "Meal added successfully",
+                "meal_id": new_meal.id
+            })
+        else:
+            # Redirect back to the meal tracker page
+            return RedirectResponse(
+                url=f"/meal-tracker/{meal_datetime.year}/{meal_datetime.month}",
+                status_code=status.HTTP_303_SEE_OTHER
+            )
         
     except ValueError as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        if is_ajax:
+            return JSONResponse(
+                status_code=400, 
+                content={"status": "error", "detail": str(e)}
+            )
+        else:
+            raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
+        if is_ajax:
+            return JSONResponse(
+                status_code=500, 
+                content={"status": "error", "detail": str(e)}
+            )
+        else:
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/meals")
 @login_required

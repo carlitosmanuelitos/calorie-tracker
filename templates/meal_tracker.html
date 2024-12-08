@@ -542,7 +542,8 @@
             method: method,
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
             },
             credentials: 'same-origin',
             body: JSON.stringify(mealData)

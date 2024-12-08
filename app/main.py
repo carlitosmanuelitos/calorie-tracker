@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, Depends, Form, HTTPException, status, Response
+from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse
 from pathlib import Path
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict
@@ -792,12 +792,9 @@ async def add_meal(
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     try:
+        # Parse the date and time
         meal_date = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date or time format")
-    
-    db = next(get_db())
-    try:
+        
         # Create meal log
         meal = MealLog(
             user_id=user.id,
@@ -950,14 +947,17 @@ async def update_meal(
         db.close()
 
 @app.delete("/api/meals/{meal_id}")
+@app.post("/api/meals/{meal_id}/delete")
 @login_required
-async def delete_meal(request: Request, meal_id: int):
+async def delete_meal(request: Request, meal_id: int, db: Session = Depends(get_db)):
     """Delete a meal log."""
     user = request.state.user
     if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        return JSONResponse(
+            status_code=401, 
+            content={"detail": "Not authenticated"}
+        )
     
-    db = next(get_db())
     try:
         meal = (
             db.query(MealLog)
@@ -966,14 +966,29 @@ async def delete_meal(request: Request, meal_id: int):
         )
         
         if not meal:
-            raise HTTPException(status_code=404, detail="Meal not found")
+            return JSONResponse(
+                status_code=404, 
+                content={"detail": "Meal not found"}
+            )
         
+        # Delete associated meal components first
+        db.query(MealComponent).filter(MealComponent.meal_log_id == meal_id).delete()
+        
+        # Then delete the meal
         db.delete(meal)
         db.commit()
-        return {"message": "Meal deleted successfully"}
+        
+        return JSONResponse(
+            status_code=200,
+            content={"message": "Meal deleted successfully"}
+        )
     
-    finally:
-        db.close()
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Error deleting meal: {str(e)}"}
+        )
 
 @app.get("/api/favorite-meals/{meal_id}")
 @login_required

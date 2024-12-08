@@ -843,36 +843,38 @@ async def add_meal(
 
 @app.get("/api/meals/{meal_id}")
 @login_required
-async def get_meal(request: Request, meal_id: int):
+async def get_meal(request: Request, meal_id: int, db: Session = Depends(get_db)):
     """Get a specific meal log."""
     user = request.state.user
     if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        return JSONResponse(
+            status_code=401, 
+            content={"detail": "Not authenticated"}
+        )
     
-    db = next(get_db())
     try:
         meal = (
             db.query(MealLog)
             .filter(MealLog.id == meal_id, MealLog.user_id == user.id)
-            .options(selectinload(MealLog.components))
             .first()
         )
         
         if not meal:
-            raise HTTPException(status_code=404, detail="Meal not found")
+            return JSONResponse(
+                status_code=404, 
+                content={"detail": "Meal not found"}
+            )
         
-        return {
+        return JSONResponse(content={
             "id": meal.id,
-            "date": meal.date.strftime("%Y-%m-%d"),
-            "time": meal.date.strftime("%H:%M"),
-            "meal_type": meal.meal_type,
-            "notes": meal.notes,
+            "datetime": meal.date.strftime("%Y-%m-%dT%H:%M"),
+            "meal_type": meal.meal_type.value,
             "components": [
                 {
                     "food_item": c.food_item,
-                    "category": c.category,
+                    "category": c.category.value,
                     "quantity": c.quantity,
-                    "unit": c.unit,
+                    "unit": c.unit.value,
                     "calories": c.calories,
                     "protein": c.protein,
                     "carbs": c.carbs,
@@ -880,71 +882,85 @@ async def get_meal(request: Request, meal_id: int):
                 }
                 for c in meal.components
             ]
-        }
+        })
     
-    finally:
-        db.close()
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Error retrieving meal: {str(e)}"}
+        )
 
 @app.put("/api/meals/{meal_id}")
 @login_required
-async def update_meal(
-    request: Request,
-    meal_id: int,
-    date: str = Form(...),
-    time: str = Form(...),
-    meal_type: str = Form(...),
-    notes: str = Form(None),
-    components: List[Dict] = Form(...)
-):
+async def update_meal(request: Request, meal_id: int, db: Session = Depends(get_db)):
     """Update an existing meal log."""
     user = request.state.user
     if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        return JSONResponse(
+            status_code=401, 
+            content={"detail": "Not authenticated"}
+        )
     
     try:
-        meal_date = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date or time format")
-    
-    db = next(get_db())
-    try:
-        meal = (
+        # Get JSON data from request body
+        meal_data = await request.json()
+        
+        # Find the existing meal
+        existing_meal = (
             db.query(MealLog)
             .filter(MealLog.id == meal_id, MealLog.user_id == user.id)
             .first()
         )
         
-        if not meal:
-            raise HTTPException(status_code=404, detail="Meal not found")
+        if not existing_meal:
+            return JSONResponse(
+                status_code=404, 
+                content={"detail": "Meal not found"}
+            )
         
-        # Update meal
-        meal.date = meal_date
-        meal.meal_type = meal_type
-        meal.notes = notes
+        # Parse the datetime string
+        meal_date = datetime.strptime(meal_data['datetime'], '%Y-%m-%dT%H:%M')
+        
+        # Update meal log
+        existing_meal.date = meal_date
+        existing_meal.meal_type = MealType(meal_data['meal_type'])
         
         # Delete existing components
-        db.query(MealComponent).filter(MealComponent.meal_id == meal_id).delete()
+        db.query(MealComponent).filter(MealComponent.meal_log_id == meal_id).delete()
         
         # Add new components
-        for comp in components:
+        for comp in meal_data['components']:
             component = MealComponent(
-                meal_id=meal.id,
+                meal_log_id=existing_meal.id,
                 food_item=comp["food_item"],
-                category=comp["category"],
-                quantity=float(comp["quantity"]),
-                unit=comp["unit"],
-                calories=int(comp["calories"]),
-                protein=float(comp["protein"]) if comp.get("protein") else None,
-                carbs=float(comp["carbs"]) if comp.get("carbs") else None,
-                fat=float(comp["fat"]) if comp.get("fat") else None
+                category=FoodCategory(comp["category"]),
+                quantity=comp["quantity"],
+                unit=UnitType(comp["unit"]),
+                calories=comp["calories"],
+                protein=comp["protein"],
+                carbs=comp["carbs"],
+                fat=comp["fat"]
             )
             db.add(component)
         
         db.commit()
-        return {"message": "Meal updated successfully"}
-    
-    finally:
-        db.close()
+        return JSONResponse(
+            status_code=200,
+            content={"message": "Meal updated successfully"}
+        )
+        
+    except ValueError as e:
+        db.rollback()
+        return JSONResponse(
+            status_code=400,
+            content={"detail": f"Invalid data format: {str(e)}"}
+        )
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Error updating meal: {str(e)}"}
+        )
 
 @app.delete("/api/meals/{meal_id}")
 @app.post("/api/meals/{meal_id}/delete")

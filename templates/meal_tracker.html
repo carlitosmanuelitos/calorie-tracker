@@ -96,7 +96,7 @@
                         <p class="text-sm text-gray-500">{{ meal.meal_type | title }}</p>
                     </div>
                     <div class="flex space-x-2">
-                        <button class="text-indigo-600 hover:text-indigo-800">Edit</button>
+                        <button class="text-indigo-600 hover:text-indigo-800" onclick="editMeal({{ meal.id }})">Edit</button>
                         <button class="text-red-600 hover:text-red-800" onclick="deleteMeal({{ meal.id }})">Delete</button>
                     </div>
                 </div>
@@ -298,18 +298,45 @@
     let componentIndex = 0;
 
     function addComponent() {
-        const template = document.getElementById('componentTemplate');
-        const componentsDiv = document.getElementById('components');
-        const clone = template.content.cloneNode(true);
+        const componentsContainer = document.getElementById('components');
+        const componentTemplate = document.getElementById('componentTemplate');
         
-        // Replace INDEX placeholder with actual index
-        const elements = clone.querySelectorAll('[name*="INDEX"]');
-        elements.forEach(element => {
-            element.name = element.name.replace('INDEX', componentIndex);
+        if (!componentsContainer || !componentTemplate) {
+            console.error('Components container or template not found');
+            return null;
+        }
+        
+        // Clone the template content
+        const componentClone = componentTemplate.content.cloneNode(true);
+        const componentEntry = componentClone.querySelector('.component-row');
+        
+        if (!componentEntry) {
+            console.error('Component row not found in template');
+            return null;
+        }
+        
+        // Update input names with current index
+        const inputs = componentEntry.querySelectorAll('input, select');
+        inputs.forEach(input => {
+            const originalName = input.getAttribute('name');
+            if (originalName) {
+                input.setAttribute('name', originalName.replace(/\[INDEX\]/, `[${componentIndex}]`));
+            }
         });
         
+        // Add remove button functionality
+        const removeButton = componentEntry.querySelector('button[type="button"]');
+        if (removeButton) {
+            removeButton.setAttribute('onclick', `removeComponent(this)`);
+        }
+        
+        // Append the new component to the container
+        componentsContainer.appendChild(componentEntry);
+        
+        // Increment component index
         componentIndex++;
-        componentsDiv.appendChild(clone);
+        
+        return componentEntry;
     }
 
     function removeComponent(button) {
@@ -372,12 +399,163 @@
             return response.json();
         })
         .then(data => {
-            // Refresh the current day's view
-            const currentDate = document.querySelector('[data-selected="true"]')?.getAttribute('data-date');
-            if (currentDate) {
-                showDayDetails(currentDate);
+            // Refresh the entire page
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert(error.message);
+        });
+    }
+
+    function editMeal(mealId) {
+        // Fetch the meal details
+        fetch(`/api/meals/${mealId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.detail || 'Failed to fetch meal details') });
             }
-            alert('Meal deleted successfully');
+            return response.json();
+        })
+        .then(mealData => {
+            console.log('Meal data received:', mealData);  // Debug log
+            
+            // Open the add meal modal
+            openModal();
+            
+            // Populate the form with existing meal data
+            const dateInput = document.getElementById('date');
+            const timeInput = document.getElementById('time');
+            const mealTypeInput = document.getElementById('meal_type');
+            
+            if (!dateInput || !timeInput || !mealTypeInput) {
+                console.error('One or more form inputs not found');
+                return;
+            }
+            
+            // Split datetime and set date and time
+            const [date, time] = mealData.datetime.split('T');
+            dateInput.value = date;
+            timeInput.value = time;
+            mealTypeInput.value = mealData.meal_type;
+            
+            // Clear existing components
+            const componentsContainer = document.getElementById('components');
+            if (!componentsContainer) {
+                console.error('Components container not found');
+                return;
+            }
+            
+            // Reset component index and clear container
+            componentsContainer.innerHTML = '';
+            componentIndex = 0;
+            
+            // Add components from the existing meal
+            mealData.components.forEach((component, index) => {
+                // Debug log for each component
+                console.log(`Adding component ${index}:`, component);
+                
+                // Add a new component row
+                const componentEntry = addComponent();
+                
+                if (!componentEntry) {
+                    console.error(`Failed to add component at index ${index}`);
+                    return;
+                }
+                
+                // Safely set component values
+                const setInputValue = (selector, value) => {
+                    const input = componentEntry.querySelector(selector);
+                    if (input) {
+                        input.value = value || '';
+                    } else {
+                        console.error(`Input not found: ${selector}`);
+                    }
+                };
+                
+                setInputValue(`[name="components[${componentIndex-1}][food_item]"]`, component.food_item);
+                setInputValue(`[name="components[${componentIndex-1}][category]"]`, component.category);
+                setInputValue(`[name="components[${componentIndex-1}][quantity]"]`, component.quantity);
+                setInputValue(`[name="components[${componentIndex-1}][unit]"]`, component.unit);
+                setInputValue(`[name="components[${componentIndex-1}][calories]"]`, component.calories);
+                setInputValue(`[name="components[${componentIndex-1}][protein]"]`, component.protein || '');
+                setInputValue(`[name="components[${componentIndex-1}][carbs]"]`, component.carbs || '');
+                setInputValue(`[name="components[${componentIndex-1}][fat]"]`, component.fat || '');
+            });
+            
+            // Store the meal ID for updating
+            window.currentEditMealId = mealData.id;
+        })
+        .catch(error => {
+            console.error('Error in editMeal:', error);
+            alert(error.message);
+        });
+    }
+
+    function submitMeal(event) {
+        event.preventDefault();
+        
+        const form = event.target;
+        const formData = new FormData(form);
+        
+        // Create the meal data structure
+        const mealData = {
+            datetime: `${formData.get('date')}T${formData.get('time')}`,
+            meal_type: formData.get('meal_type'),
+            components: []
+        };
+        
+        // Process components
+        const componentEntries = document.querySelectorAll('.component-row');
+        componentEntries.forEach((entry, index) => {
+            const component = {
+                food_item: formData.get(`components[${index}][food_item]`),
+                category: formData.get(`components[${index}][category]`),
+                quantity: parseFloat(formData.get(`components[${index}][quantity]`)),
+                unit: formData.get(`components[${index}][unit]`),
+                calories: parseInt(formData.get(`components[${index}][calories]`)),
+                protein: parseFloat(formData.get(`components[${index}][protein]`) || 0),
+                carbs: parseFloat(formData.get(`components[${index}][carbs]`) || 0),
+                fat: parseFloat(formData.get(`components[${index}][fat]`) || 0)
+            };
+            mealData.components.push(component);
+        });
+
+        console.log('Submitting meal data:', mealData);  // Debug log
+        
+        // Determine if we're adding a new meal or updating an existing one
+        const isEditing = window.currentEditMealId !== null && window.currentEditMealId !== undefined;
+        const url = isEditing 
+            ? `/api/meals/${window.currentEditMealId}` 
+            : '/meal-tracker/add-meal';
+        
+        const method = isEditing ? 'PUT' : 'POST';
+        
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(mealData)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.detail || 'Failed to submit meal') });
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Refresh the entire page
+            window.location.reload();
         })
         .catch(error => {
             console.error('Error:', error);
@@ -400,6 +578,12 @@
                 closeModal();
             }
         });
+        
+        // Add submit event listener to the form
+        const form = document.getElementById('addMealForm');
+        if (form) {
+            form.addEventListener('submit', submitMeal);
+        }
     });
     </script>
 

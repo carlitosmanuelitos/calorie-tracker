@@ -216,6 +216,7 @@ async def dashboard(
     })
 
 @app.get("/logout")
+@app.post("/logout")
 async def logout():
     response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie("access_token")

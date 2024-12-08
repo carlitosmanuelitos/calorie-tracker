@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">Exercise Tracker</h1>
+        <button onclick="openModal()" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <svg class="h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+            </svg>
+            Add Exercise
+        </button>
+    </div>
+
+    <!-- Calendar Navigation -->
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex space-x-2">
+            <a href="/exercise-tracker/{{ prev_month.year }}/{{ prev_month.month }}" class="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+                Previous Month
+            </a>
+            <h2 class="text-2xl font-bold">{{ month | month_name }} {{ year }}</h2>
+            <a href="/exercise-tracker/{{ next_month.year }}/{{ next_month.month }}" class="inline-flex items-center p-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                Next Month
+                <svg class="h-5 w-5 ml-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                </svg>
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Calendar View -->
+        <div class="lg:col-span-2">
+            <div class="bg-white shadow rounded-lg p-4">
+                <!-- Days of Week Header -->
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    {% for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}
+                    <div class="text-center text-sm font-medium text-gray-700">
+                        {{ day }}
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Calendar Grid -->
+                <div class="grid grid-cols-7 gap-1">
+                    {% for week in calendar_weeks %}
+                        {% for day in week %}
+                            {% if day.date %}
+                                <div class="aspect-square p-1">
+                                    <button onclick="showDayDetails('{{ day.date.strftime('%Y-%m-%d') }}')" 
+                                            class="w-full h-full rounded-lg p-1 text-sm hover:bg-gray-50 relative
+                                            {% if day.date == today %}bg-indigo-50 font-bold{% endif %}
+                                            {% if day.has_exercises %}border-2 border-indigo-500{% else %}border border-gray-200{% endif %}">
+                                        <span class="absolute top-1 left-1">{{ day.date.day }}</span>
+                                        {% if day.has_exercises %}
+                                            <span class="absolute bottom-1 right-1 w-2 h-2 bg-indigo-500 rounded-full"></span>
+                                        {% endif %}
+                                    </button>
+                                </div>
+                            {% else %}
+                                <div class="aspect-square p-1">
+                                    <div class="w-full h-full rounded-lg border border-gray-100 bg-gray-50"></div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Summary Panel -->
+        <div class="lg:col-span-1">
+            <div class="bg-white shadow rounded-lg p-4">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Daily Summary</h3>
+                <div id="dailySummary">
+                    <p class="text-gray-500 text-sm">Select a day to view details</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Exercises List -->
+    <div class="mt-8">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">Recent Exercises</h3>
+        <div class="space-y-4">
+            {% for exercise in exercise_logs %}
+            <div class="bg-white shadow rounded-lg p-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-medium">{{ exercise.date.strftime('%B %d, %Y %I:%M %p') }}</h3>
+                        <p class="text-sm text-gray-500">{{ exercise.exercise_type | title }}</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button class="text-indigo-600 hover:text-indigo-800" onclick="editExercise({{ exercise.id }})">Edit</button>
+                        <button class="text-red-600 hover:text-red-800" onclick="deleteExercise({{ exercise.id }})">Delete</button>
+                    </div>
+                </div>
+                
+                {% if exercise.components %}
+                <div class="mt-4">
+                    <h4 class="text-sm font-medium text-gray-700 mb-2">Components</h4>
+                    <div class="grid grid-cols-6 gap-4 text-sm text-gray-600">
+                        <div class="font-medium">Exercise Name</div>
+                        <div class="font-medium">Category</div>
+                        <div class="font-medium">Sets</div>
+                        <div class="font-medium">Reps</div>
+                        <div class="font-medium">Weight</div>
+                        <div class="font-medium">Rest Time</div>
+                    </div>
+                    {% for component in exercise.components %}
+                    <div class="grid grid-cols-6 gap-4 text-sm text-gray-600 mt-1">
+                        <div>{{ component.exercise_name }}</div>
+                        <div>{{ component.category | title }}</div>
+                        <div>{{ component.sets }}</div>
+                        <div>{{ component.reps }}</div>
+                        <div>{{ component.weight }} {{ component.unit }}</div>
+                        <div>{{ component.rest_time }} minutes</div>
+                    </div>
+                    {% endfor %}
+                    
+                    <!-- Totals -->
+                    <div class="mt-2 pt-2 border-t grid grid-cols-6 gap-4 text-sm font-medium">
+                        <div class="col-span-3 text-right">Total:</div>
+                        <div>{{ exercise.components | sum(attribute='sets') }} sets</div>
+                        <div>{{ exercise.components | sum(attribute='reps') }} reps</div>
+                        <div>{{ exercise.components | sum(attribute='weight') }} {{ exercise.components | first(attribute='unit') }}</div>
+                        <div>{{ exercise.components | sum(attribute='rest_time') }} minutes</div>
+                        <div></div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if exercise.notes %}
+                <div class="mt-4 text-sm text-gray-600">
+                    <p class="font-medium">Notes:</p>
+                    <p>{{ exercise.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Add Exercise Modal -->
+    <div id="addExerciseModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-5xl">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Add New Exercise</h3>
+                </div>
+                <form id="addExerciseForm" method="POST" action="/exercise-tracker/add-exercise" class="p-6">
+                    <div class="space-y-6">
+                        <!-- Date and Time -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="date" class="block text-sm font-medium text-gray-700">Date</label>
+                                <input type="date" name="date" id="date" required 
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                                    value="{{ today | dateformat }}"
+                                >
+                            </div>
+                            <div>
+                                <label for="time" class="block text-sm font-medium text-gray-700">Time</label>
+                                <input type="time" name="time" id="time" required 
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                                    value="{{ today | timeformat }}"
+                                >
+                            </div>
+                        </div>
+
+                        <!-- Exercise Type and Intensity -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="exercise_type" class="block text-sm font-medium text-gray-700">Exercise Type</label>
+                                <select name="exercise_type" id="exercise_type" required 
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                                >
+                                    {% for type in exercise_types %}
+                                        <option value="{{ type.value }}">{{ type.value | title }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="intensity" class="block text-sm font-medium text-gray-700">Intensity</label>
+                                <select name="intensity" id="intensity" required 
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                                >
+                                    {% for intensity in exercise_intensities %}
+                                        <option value="{{ intensity.value }}">{{ intensity.value | title }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Duration -->
+                        <div>
+                            <label for="duration" class="block text-sm font-medium text-gray-700">Duration (minutes)</label>
+                            <input type="number" name="duration" id="duration" required min="0" step="1" 
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                            >
+                        </div>
+
+                        <!-- Exercise Components Container -->
+                        <div id="exerciseComponentsContainer">
+                            <!-- Dynamic exercise components will be added here -->
+                        </div>
+
+                        <!-- Add Exercise Component Button -->
+                        <div class="mt-2">
+                            <button type="button" onclick="addComponent()" 
+                                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            >
+                                Add Exercise
+                            </button>
+                        </div>
+
+                        <!-- Notes -->
+                        <div>
+                            <label for="notes" class="block text-sm font-medium text-gray-700">Notes (Optional)</label>
+                            <textarea name="notes" id="notes" rows="3"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                            ></textarea>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex items-center justify-end space-x-3">
+                        <button type="button" onclick="closeModal()" 
+                            class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                            Cancel
+                        </button>
+                        <button type="submit" 
+                            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                            Save Exercise
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Component Template (hidden) -->
+    <template id="componentTemplate">
+        <div class="grid grid-cols-12 gap-4 items-center component-row mb-4">
+            <div class="col-span-4">
+                <label class="block text-sm font-medium text-gray-700">Exercise Name</label>
+                <input type="text" name="components[{index}][exercise_name]" required 
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                >
+            </div>
+            <div class="col-span-3">
+                <label class="block text-sm font-medium text-gray-700">Category</label>
+                <select name="components[{index}][category]" required 
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                >
+                    {% for category in exercise_categories %}
+                        <option value="{{ category.value }}">{{ category.value | title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-700">Sets</label>
+                <input type="number" name="components[{index}][sets]" min="0" 
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                >
+            </div>
+            <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-700">Reps</label>
+                <input type="number" name="components[{index}][reps]" min="0" 
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
+                >
+            </div>
+            <div class="col-span-1">
+                <button type="button" onclick="removeComponent(this)" 
+                    class="mt-6 text-red-500 hover:text-red-700"
+                >
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </template>
+
+    <script>
+    function addComponent() {
+        const template = document.getElementById('componentTemplate');
+        const container = document.getElementById('exerciseComponentsContainer');
+        const componentCount = container.children.length;
+        
+        const newComponent = template.content.cloneNode(true);
+        
+        // Replace {index} placeholders
+        newComponent.innerHTML = newComponent.innerHTML.replace(/\{index\}/g, componentCount);
+        
+        container.appendChild(newComponent);
+    }
+
+    function removeComponent(button) {
+        button.closest('.component-row').remove();
+    }
+
+    function submitExercise(event) {
+        event.preventDefault();
+        
+        const form = event.target;
+        const formData = new FormData(form);
+        
+        // Create the exercise data structure
+        const exerciseData = {
+            datetime: `${formData.get('date')}T${formData.get('time')}`,
+            exercise_type: formData.get('exercise_type'),
+            intensity: formData.get('intensity'),
+            duration: parseFloat(formData.get('duration')),
+            notes: formData.get('notes'),
+            components: []
+        };
+        
+        // Process components
+        const componentEntries = document.querySelectorAll('.component-row');
+        componentEntries.forEach((entry, index) => {
+            const component = {
+                exercise_name: formData.get(`components[${index}][exercise_name]`),
+                category: formData.get(`components[${index}][category]`),
+                sets: parseInt(formData.get(`components[${index}][sets]`) || 0),
+                reps: parseInt(formData.get(`components[${index}][reps]`) || 0)
+            };
+            exerciseData.components.push(component);
+        });
+
+        console.log('Submitting exercise data:', exerciseData);
+        
+        fetch('/exercise-tracker/add-exercise', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(exerciseData)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.detail || 'Failed to submit exercise') });
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Refresh the entire page
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert(error.message);
+        });
+    }
+
+    function showDayDetails(date) {
+        console.log('Fetching details for date:', date);
+        
+        fetch(`/exercise-tracker/view/${date}`)
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        console.log('Error response:', text);
+                        throw new Error(`Network response was not ok: ${text}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Received data:', data);
+                const summary = document.getElementById('dailySummary');
+                if (data.exercises && data.exercises.length > 0) {
+                    let html = `<h4 class="text-lg font-medium mb-2">${new Date(date).toLocaleDateString()}</h4>`;
+                    html += `<div class="space-y-4">`;
+                    data.exercises.forEach(exercise => {
+                        html += `
+                            <div class="border-b pb-2">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-medium">${exercise.exercise_type}</span>
+                                    <span class="text-sm text-gray-500">${new Date(exercise.date).toLocaleTimeString()}</span>
+                                </div>
+                                <div class="mt-2 text-sm">
+                                    <div>Duration: ${exercise.duration} mins</div>
+                                    <div>Intensity: ${exercise.intensity}</div>
+                                    <div>Calories Burned: ${exercise.total_calories_burned || 'N/A'}</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                    html += `
+                        <div class="mt-4 pt-4 border-t">
+                            <div class="font-medium">Daily Totals:</div>
+                            <div class="text-sm">
+                                <div>Total Duration: ${data.totals.duration} mins</div>
+                                <div>Total Calories Burned: ${data.totals.calories_burned}</div>
+                            </div>
+                        </div>
+                    `;
+                    summary.innerHTML = html;
+                } else {
+                    summary.innerHTML = `
+                        <h4 class="text-lg font-medium mb-2">${new Date(date).toLocaleDateString()}</h4>
+                        <p class="text-gray-500">No exercises recorded for this day</p>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('dailySummary').innerHTML = `
+                    <p class="text-red-500">Error loading exercise details</p>
+                `;
+            });
+    }
+
+    // Event Listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        const addExerciseButton = document.querySelector('[onclick="openModal()"]');
+        if (addExerciseButton) {
+            addExerciseButton.addEventListener('click', openModal);
+        }
+        
+        const modal = document.getElementById('addExerciseModal');
+        modal.addEventListener('click', function(event) {
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+        
+        const form = document.getElementById('addExerciseForm');
+        if (form) {
+            form.addEventListener('submit', submitExercise);
+        }
+    });
+    </script>
+{% endblock %}

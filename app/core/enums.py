@@ -178,3 +178,9 @@ class FitnessGoal(str, Enum):
     ATHLETIC_PERFORMANCE = "ATHLETIC_PERFORMANCE"
     REHABILITATION = "REHABILITATION"
     STRESS_MANAGEMENT = "STRESS_MANAGEMENT"
+
+class ExerciseIntensity(str, Enum):
+    """Intensity of exercise."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"

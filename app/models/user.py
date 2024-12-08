@@ -8,6 +8,7 @@ from app.core.enums import (
     Gender, FitnessGoal, TimePreference, ExerciseType, PreferredSport,
     MedicalCondition, CommonMedication, CommonAllergy, PastInjury
 )
+from app.models.exercise import ExerciseLog
 
 class User(Base):
     """User model."""
@@ -35,6 +36,7 @@ class User(Base):
     meal_logs = relationship("MealLog", back_populates="user", cascade="all, delete-orphan")
     favorite_meals = relationship("FavoriteMeal", back_populates="user", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="user")
+    exercise_logs = relationship("ExerciseLog", back_populates="user")
 
 class UserProfile(Base):
     """User profile model for storing user preferences and health data"""
@@ -61,7 +63,7 @@ class UserProfile(Base):
     fitness_goal = Column(Enum(FitnessGoal), nullable=False)
     time_preference = Column(Enum(TimePreference), nullable=False)
     exercise_types = Column(JSON, nullable=False)  # List of ExerciseType values
-    preferred_sports = Column(JSON, nullable=False)  # List of PreferredSport values
+    preferred_sports = Column(JSON, nullable=False, default=list)  # List of PreferredSport values
     exercise_notes = Column(String, nullable=True)
 
     # Step 4: Nutrition Goals

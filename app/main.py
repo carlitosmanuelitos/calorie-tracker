@@ -4,8 +4,10 @@ from fastapi import (
     HTTPException, 
     status, 
     Form, 
-    Request
+    Request,
+    Response
 )
+from fastapi.responses import HTMLResponse  # Add this import
 from starlette.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -17,6 +19,7 @@ import secrets
 from datetime import datetime, timedelta
 from calendar import monthcalendar
 from sqlalchemy.orm import selectinload
+from sqlalchemy import extract
 from .models.meal import MealLog, MealComponent, FavoriteMeal, FavoriteMealComponent, MealType, FoodCategory, UnitType
 
 from app.core.config import settings
@@ -24,10 +27,10 @@ from app.core.security import verify_password, get_password_hash, create_access_
 from app.core.password_validation import password_validator
 from app.core.enums import (
     Gender, FitnessGoal, TimePreference, ExerciseType, PreferredSport,
-    MedicalCondition, CommonMedication, CommonAllergy, PastInjury
+    MedicalCondition, CommonMedication, CommonAllergy, PastInjury, ExerciseIntensity
 )
 from app.db.session import get_db
-from app.db.base import User, UserProfile
+from app.db.base import User, UserProfile, ExerciseLog, ExerciseComponent
 from app.models.knowledge import KnowledgeCategory, Comment
 from app.schemas.survey import (
     SurveyCreate, HealthConditionSchema, MedicationSchema,
@@ -72,7 +75,25 @@ def month_name(month_number):
     """Convert month number to month name."""
     return datetime(2000, month_number, 1).strftime('%B')
 
+def dateformat(value, format='%Y-%m-%d'):
+    """Format a date using the specified format."""
+    if not value:
+        return ''
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    return value.strftime(format)
+
+def timeformat(value, format='%I:%M %p'):
+    """Format a time using the specified format."""
+    if not value:
+        return ''
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    return value.strftime(format)
+
 templates.env.filters["month_name"] = month_name
+templates.env.filters["dateformat"] = dateformat
+templates.env.filters["timeformat"] = timeformat
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -1144,6 +1165,96 @@ async def add_favorite_meal(
     
     finally:
         db.close()
+
+@app.get("/exercise-tracker")
+@login_required
+async def exercise_tracker(request: Request, db: Session = Depends(get_db)):
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    today = datetime.now()
+    
+    # Calculate previous and next month
+    first_day = today.replace(day=1)
+    prev_month = first_day - timedelta(days=1)
+    next_month = first_day.replace(day=28) + timedelta(days=4)
+    next_month = next_month.replace(day=1)
+    
+    # Fetch exercise logs for the current month
+    exercise_logs = db.query(ExerciseLog).filter(
+        ExerciseLog.user_id == user.id,
+        extract('month', ExerciseLog.date) == today.month,
+        extract('year', ExerciseLog.date) == today.year
+    ).order_by(ExerciseLog.date.desc()).all()
+    
+    return templates.TemplateResponse("exercise_tracker.html", {
+        "request": request, 
+        "user": user,
+        "today": today,
+        "prev_month": prev_month,
+        "next_month": next_month,
+        "month": today.month,
+        "year": today.year,
+        "current_month": today.month,
+        "current_year": today.year,
+        "exercise_logs": exercise_logs
+    })
+
+@app.post("/api/exercise-log")
+@login_required
+async def create_exercise_log(request: Request, db: Session = Depends(get_db)):
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    try:
+        exercise_data = await request.json()
+        
+        new_exercise_log = ExerciseLog(
+            user_id=user.id,
+            date=datetime.now(),
+            exercise_type=ExerciseType(exercise_data['exercise_type']),
+            duration=float(exercise_data['duration']),
+            intensity=ExerciseIntensity(exercise_data['intensity']),
+            notes=exercise_data.get('notes', '')
+        )
+        
+        db.add(new_exercise_log)
+        db.commit()
+        db.refresh(new_exercise_log)
+        
+        return {
+            "id": new_exercise_log.id,
+            "date": new_exercise_log.date.isoformat(),
+            "exercise_type": new_exercise_log.exercise_type.value,
+            "duration": new_exercise_log.duration,
+            "intensity": new_exercise_log.intensity.value,
+            "notes": new_exercise_log.notes
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/exercise-logs")
+@login_required
+async def get_exercise_logs(request: Request, db: Session = Depends(get_db)):
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    exercise_logs = db.query(ExerciseLog).filter(ExerciseLog.user_id == user.id).order_by(ExerciseLog.date.desc()).all()
+    
+    return [
+        {
+            "id": log.id,
+            "date": log.date.isoformat(),
+            "exercise_type": log.exercise_type.value,
+            "duration": log.duration,
+            "intensity": log.intensity.value,
+            "notes": log.notes
+        } for log in exercise_logs
+    ]
 
 if __name__ == "__main__":
     import uvicorn
